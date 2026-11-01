@@ -14,6 +14,13 @@
 |---|---|---|---|
 | emprestimoId | inteiro | sim | 9001 |
 
+## Pré-condições e regras
+
+- O empréstimo identificado por `emprestimoId` deve existir.
+- A devolução é permitida para um empréstimo com status `ativo` ou `atrasado`, desde que ainda não tenha sido devolvido.
+- Ao concluir, o Backend 1 registra `devolvidoEm`, altera o status para `devolvido` e atualiza a quantidade disponível do livro.
+- Um empréstimo já devolvido não pode ser devolvido novamente.
+
 ## Saída
 
 | Campo | Tipo | Obrigatório | Exemplo |
