@@ -67,7 +67,7 @@ Regras gerais:
 | `quantidadeExemplares` (CT1) | inteiro ≥ 1 | `QUANTIDADE_INVALIDA` |
 | `nome` (CT3) | texto de 1 a 150 caracteres | `DADOS_INVALIDOS` |
 | `cpf` (CT3) | pontos, traço e espaços removidos; resultado com exatamente 11 dígitos. Dígitos verificadores **não** são conferidos (o exemplo `12345678900` dos contratos não passaria). É gravado e devolvido normalizado | `DADOS_INVALIDOS` |
-| `contato` (CT3) | até 120 caracteres; e-mail no formato `algo@dominio.ext` (sem espaços, um `@`, ao menos um ponto depois do `@`) **ou** telefone: depois de remover espaços, parênteses, hífens e um `+` inicial, só dígitos, com 10 a 13 dígitos. Gravado como recebido, sem os espaços das pontas | `DADOS_INVALIDOS` |
+| `contato` (CT3) | até 120 caracteres; e-mail no formato `algo@dominio.ext` (nenhum caractere branco — espaço, tabulação, quebra de linha; exatamente um `@`; parte antes do `@` não vazia; depois do `@`, ao menos um ponto, sem começar nem terminar com ponto) **ou** telefone: depois de remover espaços (U+0020), parênteses e hífens e, em seguida, um `+` inicial (então `(+55) 19 99999-0000` é aceito), só dígitos, com 10 a 13 dígitos (tabulação ou quebra de linha no meio é inválida). Gravado como recebido, sem os espaços das pontas | `DADOS_INVALIDOS` |
 | `usuarioId`, `livroId` (CT5) | inteiro ≥ 1 | `DADOS_INVALIDOS` |
 | `emprestimoId` (CT6, no caminho) | inteiro ≥ 1; qualquer outro valor é tratado como empréstimo inexistente | `EMPRESTIMO_NAO_ENCONTRADO` |
 

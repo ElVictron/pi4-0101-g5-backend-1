@@ -14,6 +14,7 @@ from app.config import Config
 from app.erros import CapturaDeErroInterno, registrar_tratadores
 from app.livros.rotas import roteador as rotas_livros
 from app.relogio import Relogio, RelogioSistema
+from app.usuarios.rotas import roteador as rotas_usuarios
 
 METODOS_CORS = ("GET", "POST", "PATCH")
 
@@ -74,5 +75,6 @@ def create_app(config: Config | None = None, relogio: Relogio | None = None) -> 
         return {"status": "ok"}
 
     app.include_router(rotas_livros)
+    app.include_router(rotas_usuarios)
 
     return app

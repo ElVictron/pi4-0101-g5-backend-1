@@ -1,8 +1,9 @@
 """Acesso ao banco (`app/db.py`) e `db/schema.sql` aplicado por ele.
 
-Usa um banco **próprio** no servidor de teste (`biblioteca_unitarios_db_teste`), criado e
-apagado por este módulo, para não depender do `tests/conftest.py` nem mexer no banco dos
-testes de contrato. Só roda em banco cujo nome termina em `_teste`.
+Usa um banco **próprio** no servidor de teste, criado e apagado por este módulo, para não
+depender do `tests/conftest.py` nem mexer no banco dos testes de contrato. O nome vem do
+banco de teste em uso (`<nome>_db_teste`): suítes com `TEST_DATABASE_URL` diferentes não
+apagam o banco uma da outra. Só roda em banco cujo nome termina em `_teste`.
 """
 
 import os
@@ -23,8 +24,8 @@ from app.erros import CodigoErro, ErroDominio
 pytestmark = pytest.mark.unitario
 
 RAIZ = Path(__file__).resolve().parents[2]
-NOME_BANCO = "biblioteca_unitarios_db_teste"
 SUFIXO_DE_TESTE = "_teste"
+SUFIXO_BANCO_PROPRIO = "_db_teste"
 TABELAS = {"livros", "usuarios", "emprestimos", "eventos_pendentes"}
 RESTRICOES = {
     "livros_isbn_unico",
@@ -69,6 +70,23 @@ def test_caminho_do_schema_aponta_para_db_schema_sql():
 # --------------------------------------------------------------------------- com banco próprio
 
 
+@pytest.mark.parametrize(
+    ("base", "esperado"),
+    [
+        ("biblioteca_teste", "biblioteca_teste_db_teste"),
+        ("biblioteca_backend_teste", "biblioteca_backend_teste_db_teste"),
+    ],
+)
+def test_nome_do_banco_proprio_deriva_do_banco_de_teste(base, esperado):
+    assert nome_do_banco_proprio(base) == esperado
+
+
+@pytest.mark.parametrize("base", [None, "", "biblioteca", "producao", "x_db_teste"])
+def test_nome_do_banco_proprio_recusa_base_que_nao_e_de_teste(base):
+    with pytest.raises(ValueError):
+        nome_do_banco_proprio(base)
+
+
 def _url_do_servidor_de_teste() -> str:
     url = os.environ.get("TEST_DATABASE_URL", "").strip()
     if url:
@@ -82,23 +100,33 @@ def _url_do_servidor_de_teste() -> str:
     return saida.stdout.strip()
 
 
+def nome_do_banco_proprio(nome_base: str | None) -> str:
+    """`<nome_base>_db_teste`; recusa base que não seja banco de teste."""
+    if not nome_base or not nome_base.endswith(SUFIXO_DE_TESTE):
+        raise ValueError(f"O banco de teste deve terminar em '{SUFIXO_DE_TESTE}': {nome_base!r}")
+    if nome_base.endswith(SUFIXO_BANCO_PROPRIO):
+        raise ValueError(f"A base já é um banco próprio deste módulo: {nome_base!r}")
+    return nome_base + SUFIXO_BANCO_PROPRIO
+
+
 @pytest.fixture(scope="module")
 def config_banco_proprio():
-    """Cria `NOME_BANCO` vazio no servidor de teste e o apaga no fim do módulo."""
+    """Cria `<banco de teste>_db_teste` vazio no servidor e o apaga no fim do módulo."""
     url_base = _url_do_servidor_de_teste()
-    if not (conninfo_to_dict(url_base).get("dbname") or "").endswith(SUFIXO_DE_TESTE):
-        pytest.fail("O servidor de teste deve ser acessado por um banco terminado em '_teste'.")
-    assert NOME_BANCO.endswith(SUFIXO_DE_TESTE)
+    try:
+        nome_banco = nome_do_banco_proprio(conninfo_to_dict(url_base).get("dbname"))
+    except ValueError as exc:
+        pytest.fail(str(exc))
     try:
         admin = psycopg.connect(url_base, autocommit=True, connect_timeout=5)
     except psycopg.OperationalError as exc:
         pytest.skip(f"Banco de teste indisponível (rode scripts/test-db.sh start): {exc}")
 
-    nome = sql.Identifier(NOME_BANCO)
+    nome = sql.Identifier(nome_banco)
     with admin:
         admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(nome))
         admin.execute(sql.SQL("CREATE DATABASE {}").format(nome))
-        yield Config(database_url=make_conninfo(url_base, dbname=NOME_BANCO))
+        yield Config(database_url=make_conninfo(url_base, dbname=nome_banco))
         admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(nome))
 
 
