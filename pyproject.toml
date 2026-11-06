@@ -1,0 +1,50 @@
+[project]
+name = "pi4-backend-1"
+version = "0.1.0"
+description = "Backend 1 do sistema de gerenciamento de biblioteca (PI IV 0101 - Grupo 5)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "psycopg[binary]>=3.2,<4",
+    "pydantic>=2.8,<3",
+    "httpx>=0.27,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-cov>=5,<7",
+    "respx>=0.21,<1",
+    "ruff>=0.6,<1",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "contrato: testes de contrato do agente de Teste",
+    "unitario: testes unitarios do agente de Backend",
+]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]

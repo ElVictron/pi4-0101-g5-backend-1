@@ -37,13 +37,15 @@ Toda resposta de erro tem este corpo:
 | `500 Internal Server Error` | `ERRO_INTERNO` (falha não prevista; nunca expõe detalhes internos) |
 
 - `ROTA_NAO_ENCONTRADA` (rota inexistente) e `ERRO_INTERNO` são códigos de infraestrutura, não de ficha.
+- Caminho com barra no fim (ex.: `/saude/`, `/livros/`) é rota inexistente: `404` `ROTA_NAO_ENCONTRADA`, sem redirecionamento.
+- Não existem rotas de documentação automática (`/docs`, `/redoc`, `/openapi.json`): respondem como rota inexistente.
 - Método não permitido numa rota existente: `405`, mesmo formato de corpo, código `ROTA_NAO_ENCONTRADA`.
 
 ## 4. Validação de entrada (corpo JSON)
 
 Ordem de verificação. A primeira regra que falhar define o erro:
 
-1. Corpo ausente, que não é JSON, ou que não é um objeto JSON → `DADOS_INVALIDOS`.
+1. Corpo ausente, que não é JSON, ou que não é um objeto JSON → `DADOS_INVALIDOS`. Também `DADOS_INVALIDOS`: `Content-Type` diferente de `application/json` (parâmetros como `charset=utf-8` são aceitos); corpo que não é UTF-8 válido; corpo acima de 64 KiB; JSON aninhado a ponto de não poder ser lido.
 2. Campo obrigatório ausente, `null`, ou texto vazio depois de remover espaços das pontas → `CAMPOS_OBRIGATORIOS`.
 3. Tipo, formato ou tamanho inválido → o código específico da ficha (`QUANTIDADE_INVALIDA` para a quantidade de exemplares) ou, nos demais campos, `DADOS_INVALIDOS`.
 4. Regras que dependem do banco (duplicidade, existência, disponibilidade) → código da ficha.
@@ -113,9 +115,13 @@ Duplicidade de ISBN e CPF é avaliada **depois** da normalização: `978-0-00-00
 ## 9. Rotas de infraestrutura
 
 - `GET /saude` → `200` com `{"status": "ok"}`. Não consulta o banco.
-- CORS: origens permitidas em `CORS_ORIGENS`, separadas por vírgula; vazio = nenhuma origem externa.
+- CORS: origens permitidas em `CORS_ORIGENS`, separadas por vírgula; vazio = nenhuma origem externa. O curinga `*` não é aceito (a configuração é recusada ao iniciar).
+- Preflight CORS recusado (origem ou método não permitido) não ganha cabeçalhos CORS e segue o formato de erro do §3.
 
 ## 10. Configuração (variáveis de ambiente)
+
+Valor vazio ou só com espaços vale como não configurado. Valor inválido (timeout que não é número positivo, `BACKEND2_VERIFY_TLS` fora de `true/false/1/0`, `*` em `CORS_ORIGENS`) faz `Config.from_env` levantar `ValueError`, e a aplicação não sobe.
+
 
 | Variável | Padrão | Uso |
 |---|---|---|

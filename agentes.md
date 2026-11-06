@@ -107,6 +107,9 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D9 | PM orquestra; agentes de Teste, Backend e Revisor (3.4) | Pedido do Victor |
 | D10 | **Transporte HTTPS** entre os serviços e **WSS** do Backend 2 para o Frontend, como nas fichas. (Uma versão do plano com HTTP foi descartada pelo Victor em 06/11/2026.) | Pedido do Victor, 06/11/2026 |
 | D11 | As lacunas P1–P14 estão detalhadas, com números e precedência de erros, em `docs/contratos/00-convencoes.md` | E0 |
+| D12 | Sem documentação automática do FastAPI (`/docs`, `/redoc`, `/openapi.json` → 404); sem redirecionamento de barra final (→ 404); corpo exige `Content-Type: application/json`, UTF-8 e no máximo 64 KiB (senão `DADOS_INVALIDOS`); `*` em `CORS_ORIGENS` é recusado; valores de configuração inválidos → `ValueError` | Revisor, E1 |
+| D13 | Rotas com corpo ou parâmetros **não** usam a validação automática do Pydantic/FastAPI: lêem o corpo por `app.entrada.corpo_json` e os parâmetros como texto, e validam na ordem do §4/§6 das convenções (evita `true` virar inteiro e códigos errados) | Revisor, E1 |
+| D14 | O TLS do servidor (`SSL_CERTFILE`/`SSL_KEYFILE`) é ligado no comando de início do contêiner (E12), não no `Config` | Revisor, E1 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
@@ -270,17 +273,18 @@ Ordem de execução. Cada um é um commit.
 app/
   main.py            criação da aplicação, CORS, tratamento de erro
   config.py          variáveis de ambiente
-  clock.py           relógio injetável
+  relogio.py         relógio injetável (RelogioSistema, RelogioFixo)
   db.py              conexão e transação
   erros.py           códigos e formato de erro (P4)
   livros/            rotas, serviço, repositório, schemas
   usuarios/
   emprestimos/
-  eventos/           cliente do Backend 2 e reenviar_eventos
+  eventos/           cliente do Backend 2
+  reenviar_eventos.py  comando de reenvio dos eventos pendentes
 db/schema.sql
 scripts/test-db.sh
 tests/
-  conftest.py        fixtures de banco, cliente, relógio, Backend 2 falso
+  conftest.py        fixtures de banco, cliente, relógio, Backend 2 falso (agente de Teste)
   contrato/          agente de Teste (congelado por entregável)
   unitarios/         agente de Backend
 docs/                contratos, ADRs (já existem)
@@ -319,6 +323,23 @@ Frontend ──HTTPS──► Backend 1 ──SQL──► PostgreSQL
 **Fica para depois (card #795, fora do plano):** subir Backend 1, Backend 2, Frontend e PostgreSQL juntos e conferir que um empréstimo numa aba muda a quantidade no painel de outra aba. A única mudança esperada no Backend 1 nessa hora é apontar `BACKEND2_URL` e o certificado para o contêiner real.
 
 **Ponto de atenção para o Victor:** o CT12 define o retorno do Backend 2 como `aceito` + `eventoId`, e `status` aceita `atrasado` no evento. Como `atrasado` não é gravado (D3) e os dois eventos do Backend 1 são de empréstimo e devolução, o Backend 1 só enviará `ativo` ou `devolvido`. Se o Backend 2 quiser tratar `atrasado`, é decisão do lado dele.
+
+---
+
+## 8B. Interface entre testes e código (definida pelo PM)
+
+Os agentes de Teste e de Backend não se veem; este é o único "contrato interno" entre eles. Mudanças aqui só pelo PM.
+
+| Ponto | Interface |
+|---|---|
+| Aplicação | `from app.main import create_app` → `create_app(config: Config \| None = None, relogio: Relogio \| None = None) -> FastAPI`. Sem argumentos, usa `Config.from_env()` e `RelogioSistema()` |
+| Configuração | `from app.config import Config` — dataclass imutável com `database_url: str`, `backend2_url: str \| None = None`, `backend2_timeout_segundos: float = 3.0`, `backend2_verify_tls: bool = True`, `backend2_ca_bundle: str \| None = None`, `cors_origens: tuple[str, ...] = ()`; `Config.from_env(env: Mapping[str, str] \| None = None)` lê as variáveis da seção 10 das convenções (sem `env`, usa `os.environ`); sem `DATABASE_URL` → `ValueError`; `CORS_ORIGENS` separado por vírgula, sem espaços nas pontas e sem itens vazios; `BACKEND2_VERIFY_TLS` aceita `true/false/1/0` (sem diferenciar maiúsculas); valores vazios valem como não configurados. O construtor de `Config` recusa `*` em `cors_origens` (`ValueError`); as demais validações ficam em `from_env` |
+| Relógio | `from app.relogio import Relogio, RelogioSistema, RelogioFixo`. `Relogio` é um protocolo com `agora() -> datetime` (sem fuso, horário de São Paulo, sem microssegundos). `RelogioFixo(instante)` tem também `avancar(delta: timedelta)` |
+| Backend 2 | A aplicação chama o Backend 2 **com `httpx`**. Os testes interceptam `POST {backend2_url}/eventos/biblioteca` com `respx` |
+| Reenvio | `from app.reenviar_eventos import main` → `main(config: Config \| None = None) -> int` (código de saída); também `python -m app.reenviar_eventos` |
+| Banco | `db/schema.sql` cria todo o banco a partir de um schema `public` vazio. O `tests/conftest.py` recria o schema e aplica o arquivo a cada sessão de teste e esvazia as tabelas entre testes |
+| Banco de teste | `TEST_DATABASE_URL`; padrão: saída de `scripts/test-db.sh url` |
+| Donos | `tests/conftest.py` e `tests/contrato/`: agente de Teste. `tests/unitarios/` (e um `tests/unitarios/conftest.py`, se precisar): agente de Backend. `app/`, `db/`: agente de Backend. `pyproject.toml`, `scripts/`, `.github/`, `agentes.md`, `docs/`: PM |
 
 ---
 
