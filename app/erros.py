@@ -10,6 +10,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 from types import MappingProxyType
 
+import psycopg
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -148,6 +149,25 @@ async def tratar_erro_inesperado(_request: Request, _exc: Exception) -> JSONResp
     return resposta_de_erro(CodigoErro.ERRO_INTERNO)
 
 
+def registrar_erro_inesperado(exc: Exception, metodo: str, caminho: str) -> None:
+    """Registra no log o erro não previsto.
+
+    Erro do banco: só o tipo, o SQLSTATE e o nome da restrição, nunca o texto do
+    PostgreSQL, que pode trazer dados enviados pelo cliente (D16 d).
+    """
+    if isinstance(exc, psycopg.Error):
+        logger.error(
+            "Erro de banco não previsto em %s %s: %s (sqlstate=%s, restricao=%s)",
+            metodo,
+            caminho,
+            type(exc).__name__,
+            exc.sqlstate,
+            exc.diag.constraint_name,
+        )
+    else:
+        logger.exception("Erro não previsto em %s %s", metodo, caminho, exc_info=exc)
+
+
 class CapturaDeErroInterno:
     """Middleware ASGI que transforma exceção não prevista em 500 `ERRO_INTERNO`.
 
@@ -173,8 +193,8 @@ class CapturaDeErroInterno:
 
         try:
             await self.app(scope, receive, enviar)
-        except Exception:
-            logger.exception("Erro não previsto em %s %s", scope["method"], scope["path"])
+        except Exception as exc:
+            registrar_erro_inesperado(exc, scope["method"], scope["path"])
             if resposta_iniciada:
                 raise
             await resposta_de_erro(CodigoErro.ERRO_INTERNO)(scope, receive, send)

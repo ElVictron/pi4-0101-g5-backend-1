@@ -12,6 +12,7 @@ from starlette.types import Receive, Scope, Send
 
 from app.config import Config
 from app.erros import CapturaDeErroInterno, registrar_tratadores
+from app.livros.rotas import roteador as rotas_livros
 from app.relogio import Relogio, RelogioSistema
 
 METODOS_CORS = ("GET", "POST", "PATCH")
@@ -71,5 +72,7 @@ def create_app(config: Config | None = None, relogio: Relogio | None = None) -> 
     async def saude() -> dict[str, str]:
         """Verificação de vida da aplicação; não consulta o banco."""
         return {"status": "ok"}
+
+    app.include_router(rotas_livros)
 
     return app

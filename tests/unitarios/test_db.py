@@ -8,6 +8,7 @@ testes de contrato. Só roda em banco cujo nome termina em `_teste`.
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -16,7 +17,8 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from app import db as modulo_db
 from app.config import Config
-from app.db import CAMINHO_SCHEMA, aplicar_schema, conectar, transacao
+from app.db import CAMINHO_SCHEMA, aplicar_schema, conectar, transacao, violacoes_como_erro
+from app.erros import CodigoErro, ErroDominio
 
 pytestmark = pytest.mark.unitario
 
@@ -206,3 +208,54 @@ def test_padrao_de_criado_em_corta_no_segundo(limpo):
         ).fetchone()
 
     assert criado_em["criado_em"] == criado_em["esperado"]
+
+
+# ----------------------------------------------- violacoes_como_erro (D16 a, d)
+
+
+def _violacao(classe, restricao):
+    falsa = type("Falsa", (classe,), {"diag": SimpleNamespace(constraint_name=restricao)})
+    return falsa("Key (isbn)=(9780000000001) already exists.")
+
+
+MAPA = {"livros_isbn_unico": CodigoErro.ISBN_DUPLICADO}
+
+
+@pytest.mark.parametrize(
+    "classe", [errors.UniqueViolation, errors.CheckViolation, errors.ForeignKeyViolation]
+)
+def test_restricao_mapeada_vira_erro_de_dominio_sem_texto_do_banco(classe):
+    with pytest.raises(ErroDominio) as erro, violacoes_como_erro(MAPA):
+        raise _violacao(classe, "livros_isbn_unico")
+
+    assert erro.value.codigo is CodigoErro.ISBN_DUPLICADO
+    assert erro.value.__cause__ is None
+    assert erro.value.__suppress_context__ is True
+    assert "9780000000001" not in erro.value.mensagem
+
+
+@pytest.mark.parametrize("restricao", ["usuarios_cpf_unico", None])
+def test_restricao_fora_do_mapa_segue_como_esta(restricao):
+    original = _violacao(errors.UniqueViolation, restricao)
+
+    with pytest.raises(errors.UniqueViolation) as erro, violacoes_como_erro(MAPA):
+        raise original
+
+    assert erro.value is original
+
+
+def test_outros_erros_nao_sao_tocados():
+    with pytest.raises(errors.OperationalError), violacoes_como_erro(MAPA):
+        raise errors.OperationalError("conexão caiu")
+
+
+def test_violacao_real_mapeada_desfaz_a_transacao(limpo):
+    with transacao(limpo) as conexao:
+        _inserir_livro(conexao, isbn="9780000000001")
+
+    with pytest.raises(ErroDominio) as erro, violacoes_como_erro(MAPA), transacao(limpo) as c:
+        _inserir_livro(c, isbn="9780000000002")
+        _inserir_livro(c, isbn="9780000000001")
+
+    assert erro.value.codigo is CodigoErro.ISBN_DUPLICADO
+    assert _contar_livros(limpo) == 1

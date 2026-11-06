@@ -2,8 +2,11 @@
 
 import asyncio
 import json
+import logging
 from datetime import datetime
+from types import SimpleNamespace
 
+import psycopg
 import pytest
 from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
@@ -16,6 +19,7 @@ from app.erros import (
     CodigoErro,
     ErroDominio,
     corpo_de_erro,
+    registrar_erro_inesperado,
     resposta_de_erro,
     tratar_erro_inesperado,
 )
@@ -243,3 +247,49 @@ def test_documentacao_e_barra_final_sao_rota_inexistente(cliente, caminho):
 
     _assert_erro(resposta, 404, "ROTA_NAO_ENCONTRADA")
     assert "location" not in resposta.headers
+
+
+# ----------------------------------------------- log sem texto do banco (D16 d)
+
+
+class _ViolacaoFalsa(psycopg.errors.UniqueViolation):
+    diag = SimpleNamespace(constraint_name="usuarios_cpf_unico")
+
+
+def test_erro_de_banco_vai_ao_log_sem_o_texto_do_postgresql(caplog):
+    exc = _ViolacaoFalsa("Key (cpf)=(12345678900) already exists.")
+
+    with caplog.at_level(logging.ERROR, logger="app.erros"):
+        registrar_erro_inesperado(exc, "POST", "/usuarios")
+
+    [registro] = caplog.records
+    texto_do_log = caplog.text
+    assert "12345678900" not in texto_do_log
+    assert "already exists" not in texto_do_log
+    assert registro.exc_info is None
+    assert "usuarios_cpf_unico" in texto_do_log
+    assert "23505" in texto_do_log
+    assert "POST /usuarios" in texto_do_log
+
+
+def test_outro_erro_vai_ao_log_com_traceback(caplog):
+    with caplog.at_level(logging.ERROR, logger="app.erros"):
+        registrar_erro_inesperado(RuntimeError("falhou"), "GET", "/x")
+
+    [registro] = caplog.records
+    assert registro.exc_info is not None
+
+
+def test_erro_de_banco_na_rota_vira_500_sem_texto_do_banco(caplog):
+    app = create_app(config=Config(database_url="postgresql://x/y"))
+
+    @app.get("/teste/banco")
+    def banco():
+        raise _ViolacaoFalsa("Key (cpf)=(12345678900) already exists.")
+
+    with caplog.at_level(logging.ERROR), TestClient(app) as cliente:
+        resposta = cliente.get("/teste/banco")
+
+    _assert_erro(resposta, 500, "ERRO_INTERNO")
+    assert "12345678900" not in resposta.text
+    assert "12345678900" not in caplog.text

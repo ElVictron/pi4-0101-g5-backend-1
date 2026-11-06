@@ -114,7 +114,7 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D16 | Regras de implementação para E4+: (a) duplicidade de ISBN/CPF mapeada pela `UniqueViolation` com o nome da restrição (`livros_isbn_unico`, `usuarios_cpf_unico`), não só por SELECT prévio; (b) existência de usuário/livro verificada antes do INSERT, FK como rede de segurança; (c) baixa de estoque pelo UPDATE condicional (P11); (d) qualquer outra violação → `ERRO_INTERNO`, sem copiar texto do banco para a mensagem nem para o log; (e) rotas que usam banco declaradas com `def` (não `async def`), para não bloquear o loop; (f) datas gravadas sempre vindas do `Relogio`, nunca do padrão do banco; (g) serviço não chama `commit`/`rollback` dentro de `transacao` | Revisor, E2 |
 | D17 | Testes de contrato semeiam dados sem `id` explícito (usar `RETURNING id`) | Revisor, E2 |
 | D18 | O schema é reaplicável (`IF NOT EXISTS`), mas não migra tabela existente: mudança de schema exige recriar o banco (documentar no README do E13; Compose do E12 aplica só em volume novo) | Revisor, E2 |
-| D19 | CI (E3): GitHub Actions em todo push e PR para `main`, Python 3.12 e 3.13, PostgreSQL 16 como serviço, ruff + pytest com cobertura mínima de 85%; `ruff` com versão exata no `pyproject.toml`. A prova de falha foi feita localmente (código de saída ≠ 0); a execução no GitHub é conferida pelo Victor na aba Actions | Revisor, E3 |
+| D19 | CI (E3): GitHub Actions em todo push e PR para `main`, Python 3.12 e 3.13, PostgreSQL 16 como serviço, ruff + pytest com cobertura mínima de 85%; `ruff` com versão exata no `pyproject.toml`. A prova de falha foi feita localmente (código de saída ≠ 0); a primeira execução no GitHub foi verde | Revisor, E3 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
@@ -374,6 +374,6 @@ Os agentes de Teste e de Backend não se veem; este é o único "contrato intern
 | Revisor (3.4) | **Ativo** (aprovado) |
 | Branch `feat/backend-1-implementacao` | Em uso |
 | Implementação | Em andamento; progresso por entregável no histórico de commits da branch |
-| CI no GitHub | **Pendente de confirmação do Victor** na aba Actions (primeira execução verde) |
+| CI no GitHub | Verde na primeira execução (commit `89c8512`, Python 3.12 e 3.13), conferido pelo PM pela API pública do GitHub |
 
 Quando o Victor liberar: começar pela E0 nesta mesma branch e seguir a ordem da seção 7.

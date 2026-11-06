@@ -45,15 +45,17 @@ Toda resposta de erro tem este corpo:
 
 Ordem de verificação. A primeira regra que falhar define o erro:
 
-1. Corpo ausente, que não é JSON, ou que não é um objeto JSON → `DADOS_INVALIDOS`. Também `DADOS_INVALIDOS`: `Content-Type` diferente de `application/json` (parâmetros como `charset=utf-8` são aceitos); corpo que não é UTF-8 válido; corpo acima de 64 KiB; JSON aninhado a ponto de não poder ser lido.
-2. Campo obrigatório ausente, `null`, ou texto vazio depois de remover espaços das pontas → `CAMPOS_OBRIGATORIOS`.
+1. Corpo ausente, que não é JSON, ou que não é um objeto JSON → `DADOS_INVALIDOS`. Também `DADOS_INVALIDOS`: `Content-Type` diferente de `application/json` (parâmetros como `charset=utf-8` são aceitos); corpo que não é UTF-8 válido; corpo acima de 64 KiB; JSON aninhado a ponto de não poder ser lido; texto com caractere Unicode inválido (ex.: o escape `\ud800`, metade de um par substituto) ou com o caractere NUL (`\u0000`) em qualquer chave ou valor.
+2. Campo obrigatório ausente, `null`, ou texto vazio depois de remover espaços das pontas → `CAMPOS_OBRIGATORIOS`. Vale para qualquer campo, inclusive os inteiros (`"quantidadeExemplares": ""` → `CAMPOS_OBRIGATORIOS`).
 3. Tipo, formato ou tamanho inválido → o código específico da ficha (`QUANTIDADE_INVALIDA` para a quantidade de exemplares) ou, nos demais campos, `DADOS_INVALIDOS`.
 4. Regras que dependem do banco (duplicidade, existência, disponibilidade) → código da ficha.
 
+Dentro dos itens 2 e 3, os campos são verificados na ordem da tabela de Entrada do contrato (ex.: no CT1, `titulo`, `autor`, `isbn`, `quantidadeExemplares`); o primeiro campo com problema define o erro.
+
 Regras gerais:
 
-- Campos de texto: espaços nas pontas são removidos antes de validar e gravar. Um campo de texto que chega com outro tipo (número, booleano, lista) é `DADOS_INVALIDOS`.
-- Campos inteiros: só número JSON inteiro. Booleano (`true`), decimal (`3.5`, `3.0`) ou texto (`"3"`) não são aceitos.
+- Campos de texto: espaços em branco nas pontas (espaço, tabulação, quebra de linha) são removidos antes de validar e gravar. Tamanhos contam caracteres, não bytes, depois dessa remoção. Um campo de texto que chega com outro tipo (número, booleano, lista) é `DADOS_INVALIDOS`.
+- Campos inteiros: só número JSON inteiro. Booleano (`true`), decimal (`3.5`, `3.0`), texto (`"3"`), lista ou objeto não são aceitos. O valor máximo de qualquer inteiro de entrada é 2147483647 (limite do `integer` do banco); acima disso vale como inválido, com o mesmo código do campo.
 - Campos desconhecidos no corpo são ignorados.
 
 ## 5. Formatos e limites

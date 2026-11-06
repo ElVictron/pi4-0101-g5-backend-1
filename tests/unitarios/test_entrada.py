@@ -16,6 +16,7 @@ from app.entrada import (
 )
 from app.erros import CodigoErro, ErroDominio
 from app.main import create_app
+from app.validacao import INTEIRO_MAXIMO, inteiro
 
 pytestmark = pytest.mark.unitario
 
@@ -217,3 +218,106 @@ def test_leitura_dentro_do_limite_junta_as_partes():
     requisicao, _ = _requisicao([b'{"a":', b" 1}"], headers={"Content-Length": "lixo"})
 
     assert asyncio.run(ler_corpo_limitado(requisicao)) == b'{"a": 1}'
+
+
+# ----------------------------------------------- Unicode inválido e inteiros enormes
+
+
+@pytest.mark.parametrize(
+    "bruto",
+    [
+        rb'{"a": "\ud800"}',
+        rb'{"a": "x\udc00y"}',
+        rb'{"\ud800": 1}',
+        rb'{"a": [{"b": ["\udfff"]}]}',
+        rb'{"a": "\ude00\ud83d"}',
+    ],
+    ids=["alto", "baixo-no-meio", "chave", "aninhado", "par-invertido"],
+)
+def test_substituto_sozinho_e_dados_invalidos(bruto):
+    with pytest.raises(ErroDominio) as erro:
+        interpretar_corpo_json(bruto)
+
+    assert erro.value.codigo is CodigoErro.DADOS_INVALIDOS
+
+
+def test_par_substituto_completo_e_aceito():
+    par = b'{"a": "\\ud83d\\ude00"}'
+    assert interpretar_corpo_json(par) == {"a": "\U0001f600"}
+
+
+def test_busca_de_unicode_invalido_nao_estoura_em_estrutura_profunda():
+    profundidade = 5_000
+    bruto = ('{"a": ' + "[" * profundidade + "1" + "]" * profundidade + "}").encode()
+
+    try:
+        resultado = interpretar_corpo_json(bruto)
+    except ErroDominio as erro:  # o leitor JSON desta versão do Python recusou a profundidade
+        assert erro.codigo is CodigoErro.DADOS_INVALIDOS
+    else:
+        assert isinstance(resultado["a"], list)
+
+
+@pytest.mark.parametrize(
+    ("numero", "esperado"),
+    [
+        ("123", 123),
+        ("-5", -5),
+        ("9" * 18, int("9" * 18)),
+        ("9" * 19, INTEIRO_MAXIMO + 1),
+        ("-" + "9" * 5000, -(INTEIRO_MAXIMO + 1)),
+    ],
+    ids=["comum", "negativo", "18-digitos", "19-digitos", "negativo-enorme"],
+)
+def test_inteiro_enorme_vira_valor_fora_da_faixa_com_o_mesmo_sinal(numero, esperado):
+    assert interpretar_corpo_json(f'{{"n": {numero}}}'.encode()) == {"n": esperado}
+
+
+def test_inteiro_com_milhares_de_digitos_nao_e_erro_de_leitura():
+    assert interpretar_corpo_json(b'{"n": ' + b"7" * 10_000 + b"}")["n"] == INTEIRO_MAXIMO + 1
+
+
+@pytest.mark.parametrize("numero", ["9" * 19, "-" + "9" * 19, "7" * 10_000])
+def test_inteiro_enorme_e_recusado_por_qualquer_validacao_de_inteiro(numero):
+    valor = interpretar_corpo_json(f'{{"n": {numero}}}'.encode())["n"]
+
+    with pytest.raises(ErroDominio):
+        inteiro(valor, "n", minimo=-INTEIRO_MAXIMO)
+
+
+# ----------------------------------------------- NUL em chave ou valor (§4 item 1)
+
+
+@pytest.mark.parametrize(
+    "bruto",
+    [
+        rb'{"a": "\u0000"}',
+        rb'{"a": "Livro\u0000x"}',
+        rb'{"\u0000": 1}',
+        rb'{"a\u0000b": "x"}',
+        rb'{"a": [{"b": ["ok", "\u0000"]}]}',
+    ],
+    ids=["valor-so-nul", "valor-no-meio", "chave-so-nul", "chave-no-meio", "aninhado"],
+)
+def test_nul_em_texto_e_dados_invalidos(bruto):
+    with pytest.raises(ErroDominio) as erro:
+        interpretar_corpo_json(bruto)
+
+    assert erro.value.codigo is CodigoErro.DADOS_INVALIDOS
+
+
+def test_nul_literal_no_corpo_nao_e_json_valido():
+    with pytest.raises(ErroDominio) as erro:
+        interpretar_corpo_json(b'{"a": "x' + b"\x00" + b'"}')
+
+    assert erro.value.codigo is CodigoErro.DADOS_INVALIDOS
+
+
+def test_escape_parecido_com_nul_e_aceito():
+    assert interpretar_corpo_json(rb'{"a": "\\u0000", "b": "0"}') == {"a": "\\u0000", "b": "0"}
+
+
+def test_nul_no_corpo_da_rota_e_400(cliente):
+    resposta = cliente.post("/teste/corpo", content=rb'{"a": "\u0000"}', headers=JSON)
+
+    _assert_dados_invalidos(resposta)
