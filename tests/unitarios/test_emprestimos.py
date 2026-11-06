@@ -310,3 +310,152 @@ def test_rota_usa_o_publicador_do_estado_da_aplicacao(monkeypatch):
     assert resposta.status_code == 201
     assert resposta.json()["emprestimoId"] == 1
     assert recebidos == [(app.state.publicador, NovoEmprestimo(3, 4))]
+
+
+# ----------------------------------------------- CT8 consultarEmprestimos (sem banco)
+
+
+def _resumo(id_, *, limite=LIMITE, devolvido_em=None):
+    return EmprestimoResumo(id_, 5, "Lucas", 7, "Livro", T0, limite, devolvido_em)
+
+
+# Bordas do §7 com agora = LIMITE: no instante exato ainda ativo; 1 s depois do limite, atrasado.
+AGORA = LIMITE
+BORDAS = [
+    _resumo(1, limite=AGORA),  # ativo (no limite)
+    _resumo(2, limite=AGORA - timedelta(seconds=1)),  # atrasado
+    _resumo(3, limite=AGORA + timedelta(seconds=1)),  # ativo
+    _resumo(4, limite=AGORA - timedelta(days=9), devolvido_em=AGORA),  # devolvido vencido
+    _resumo(5, limite=AGORA + timedelta(days=9), devolvido_em=T0),  # devolvido no prazo
+]
+
+
+@pytest.fixture
+def consulta(monkeypatch):
+    chamadas = []
+
+    @contextmanager
+    def transacao_falsa(config, *, somente_leitura=False):
+        chamadas.append(("abre", somente_leitura))
+        yield "conexao"
+
+    def buscar(conexao, termo):
+        chamadas.append(("buscar", termo))
+        return list(BORDAS)
+
+    monkeypatch.setattr(servico, "transacao", transacao_falsa)
+    monkeypatch.setattr(servico.repositorio, "buscar_resumos", buscar)
+    return chamadas
+
+
+@pytest.mark.parametrize(
+    ("status", "ids"),
+    [
+        (None, [1, 2, 3, 4, 5]),
+        (Situacao.ATIVO, [1, 3]),
+        (Situacao.ATRASADO, [2]),
+        (Situacao.DEVOLVIDO, [4, 5]),
+    ],
+)
+def test_filtro_por_situacao_nas_bordas(consulta, status, ids):
+    resultado = servico.consultar_emprestimos(
+        Config(database_url="postgresql://x/y_teste"), RelogioFixo(AGORA), status, "lu"
+    )
+
+    assert [e.id for e in resultado.emprestimos] == ids
+    assert resultado.agora == AGORA
+    assert consulta == [("abre", True), ("buscar", "lu")]
+
+
+@pytest.mark.parametrize("status", list(Situacao))
+def test_filtro_e_resposta_concordam_na_situacao(consulta, status):
+    resultado = servico.consultar_emprestimos(
+        Config(database_url="postgresql://x/y_teste"), RelogioFixo(AGORA), status, None
+    )
+
+    situacoes = {
+        emprestimo_resumo_para_json(e, resultado.agora)["status"] for e in resultado.emprestimos
+    }
+    assert situacoes == {status.value}
+
+
+class _ConexaoQueGuarda:
+    def __init__(self):
+        self.consultas = []
+
+    def execute(self, consulta, parametros):
+        self.consultas.append((consulta.as_string(None), parametros))
+
+        class _Cursor:
+            def fetchall(self):
+                return []
+
+        return _Cursor()
+
+
+@pytest.mark.parametrize("termo", [None, "lu"])
+def test_sql_da_busca_de_emprestimos(termo):
+    conexao = _ConexaoQueGuarda()
+
+    assert repositorio.buscar_resumos(conexao, termo) == []
+
+    [(texto, parametros)] = conexao.consultas
+    assert repositorio.COLUNAS_DA_BUSCA == ("u.nome", "l.titulo")
+    assert parametros == {"termo": termo}
+    assert texto.endswith("ORDER BY e.emprestado_em DESC, e.id DESC")
+    if termo is None:
+        assert "WHERE" not in texto
+    else:
+        assert '"u"."nome"' in texto and '"l"."titulo"' in texto and "cpf" not in texto
+
+
+@pytest.fixture
+def cliente_consulta(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    recebidos = []
+
+    def consultar(config, relogio, status, busca):
+        recebidos.append((status, busca))
+        return servico.EmprestimosConsultados(emprestimos=BORDAS[:2], agora=AGORA)
+
+    monkeypatch.setattr(servico, "consultar_emprestimos", consultar)
+    app = create_app(config=Config(database_url="postgresql://x/y_teste"))
+    with TestClient(app) as cliente:
+        yield cliente, recebidos
+
+
+def test_rota_de_consulta_monta_lista_e_total(cliente_consulta):
+    cliente, recebidos = cliente_consulta
+
+    resposta = cliente.get("/emprestimos?status=+atrasado+&busca=+Lu+&status=ativo&pagina=0")
+
+    assert resposta.status_code == 200
+    dados = resposta.json()
+    assert dados["total"] == 2
+    assert [(e["emprestimoId"], e["status"]) for e in dados["emprestimos"]] == [
+        (1, "ativo"),
+        (2, "atrasado"),
+    ]
+    assert recebidos == [(Situacao.ATRASADO, "Lu")]
+
+
+@pytest.mark.parametrize(
+    ("consulta", "codigo"),
+    [
+        ("status=ATIVO", "STATUS_INVALIDO"),
+        ("status=%00&busca=" + "a" * 101, "STATUS_INVALIDO"),
+        ("busca=" + "a" * 101 + "&status=ativo", "BUSCA_INVALIDA"),
+        ("busca=%FF", "BUSCA_INVALIDA"),
+    ],
+)
+def test_rota_de_consulta_valida_status_antes_de_busca(cliente_consulta, consulta, codigo):
+    cliente, recebidos = cliente_consulta
+
+    resposta = cliente.get(f"/emprestimos?{consulta}")
+
+    assert resposta.status_code == 400
+    assert resposta.json()["erro"]["codigo"] == codigo
+    assert recebidos == []

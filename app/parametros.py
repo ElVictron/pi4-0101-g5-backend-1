@@ -64,6 +64,16 @@ def ler_busca(bruto: bytes | None, *, codigo: CodigoErro = CodigoErro.BUSCA_INVA
     return termo
 
 
+def ler_opcao(
+    bruto: bytes | None, nome: str, *, opcoes: Collection[str], codigo: CodigoErro
+) -> str | None:
+    """Um dos valores de `opcoes`, exatamente (com maiúsculas), depois de cortar as pontas."""
+    valor = texto_do_parametro(bruto, nome, codigo)
+    if valor is not None and valor not in opcoes:
+        raise ErroDominio(codigo, f"O parâmetro '{nome}' deve ser um destes: {', '.join(opcoes)}.")
+    return valor
+
+
 def ler_inteiro(
     bruto: bytes | None,
     nome: str,

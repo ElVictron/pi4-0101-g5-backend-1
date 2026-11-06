@@ -11,6 +11,7 @@ from app.parametros import (
     ler_busca,
     ler_consulta_paginada,
     ler_inteiro,
+    ler_opcao,
     primeiros_valores,
     texto_do_parametro,
 )
@@ -199,3 +200,27 @@ def test_deslocamento(pagina, tamanho, deslocamento):
 
     assert consulta.deslocamento == deslocamento
     assert consulta.deslocamento < 2**63
+
+
+# ----------------------------------------------- opção exata (status do CT8)
+
+OPCOES = ("ativo", "devolvido", "atrasado")
+
+
+def _opcao(bruto):
+    return ler_opcao(bruto, "status", opcoes=OPCOES, codigo=CodigoErro.STATUS_INVALIDO)
+
+
+@pytest.mark.parametrize(
+    ("bruto", "esperado"),
+    [(None, None), (b"", None), (b" \t", None), (b"ativo", "ativo"), (b"\tatrasado\n", "atrasado")],
+)
+def test_opcao_valida_ou_ausente(bruto, esperado):
+    assert _opcao(bruto) == esperado
+
+
+@pytest.mark.parametrize(
+    "bruto", [b"ATIVO", b"Ativo", b"ativos", b"at ivo", b"ativo\x00", b"\xff", b"\xc2\xa0ativo"]
+)
+def test_opcao_invalida(bruto):
+    assert _codigo(_opcao, bruto) is CodigoErro.STATUS_INVALIDO

@@ -23,6 +23,16 @@
 - Um empréstimo já devolvido não pode ser devolvido novamente.
 - Depois de gravar, publica `devolucao_registrada` no Backend 2 (CT12), com a mesma regra de falha do CT5.
 
+## Detalhes
+
+- `emprestimoId` vem só do caminho. A rota não exige corpo; se vier corpo (de qualquer tipo), ele é ignorado.
+- `emprestimoId` que não é inteiro ≥ 1 no formato `[0-9]+` (dígitos ASCII, até 2147483647) é tratado como empréstimo inexistente → `EMPRESTIMO_NAO_ENCONTRADO`.
+- Ordem: empréstimo inexistente → `EMPRESTIMO_NAO_ENCONTRADO`; já devolvido → `EMPRESTIMO_JA_DEVOLVIDO`.
+- `devolvidoEm` = agora do relógio da aplicação; a quantidade disponível do livro sobe exatamente 1, e `quantidadeDisponivel` na resposta é o valor depois dessa alta.
+- Duas devoluções simultâneas do mesmo empréstimo: exatamente uma tem sucesso; a outra recebe `EMPRESTIMO_JA_DEVOLVIDO`, e a quantidade sobe uma vez só.
+- Depois de gravar, publica no Backend 2 (CT12) `tipo` `devolucao_registrada`, `status` `devolvido`, `livroId`, `usuarioId`, `emprestimoId`, `quantidadeDisponivel` (depois da alta) e `atualizadaEm` = `devolvidoEm`, com a mesma regra de falha do CT5 (00-convencoes §8).
+- Erros não publicam nada.
+
 ## Saída
 
 | Campo | Tipo | Obrigatório | Exemplo |

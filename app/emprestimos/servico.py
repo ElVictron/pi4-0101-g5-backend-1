@@ -1,13 +1,22 @@
-"""Regras de negócio de empréstimos (CT5)."""
+"""Regras de negócio de empréstimos (CT5, CT8)."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 
 from app.config import Config
 from app.db import transacao, violacoes_como_erro
 from app.emprestimos import repositorio
-from app.emprestimos.esquemas import Emprestimo, NovoEmprestimo, Situacao, data_limite_para
+from app.emprestimos.esquemas import (
+    Emprestimo,
+    EmprestimoResumo,
+    NovoEmprestimo,
+    Situacao,
+    data_limite_para,
+    situacao_efetiva,
+)
 from app.erros import CodigoErro, ErroDominio
 from app.eventos.publicador import EMPRESTIMO_REGISTRADO, PublicadorDeEventos, montar_payload
 from app.eventos.servico import publicar_ou_guardar
@@ -70,3 +79,29 @@ def registrar_emprestimo(
         ),
     )
     return emprestimo
+
+
+@dataclass(frozen=True)
+class EmprestimosConsultados:
+    emprestimos: list[EmprestimoResumo]
+    agora: datetime
+
+
+def consultar_emprestimos(
+    config: Config, relogio: Relogio, status: Situacao | None, busca: str | None
+) -> EmprestimosConsultados:
+    """CT8: filtro por situação efetiva e busca, sem paginação.
+
+    A situação vem de uma única definição (`situacao_efetiva`), com o mesmo `agora` no
+    filtro e na resposta: o SQL só aplica a busca e a ordem.
+    """
+    agora = relogio.agora()
+    with transacao(config, somente_leitura=True) as conexao:
+        encontrados = repositorio.buscar_resumos(conexao, busca)
+    if status is not None:
+        encontrados = [
+            e
+            for e in encontrados
+            if situacao_efetiva(e.devolvido_em, e.data_limite_devolucao, agora) is status
+        ]
+    return EmprestimosConsultados(emprestimos=encontrados, agora=agora)

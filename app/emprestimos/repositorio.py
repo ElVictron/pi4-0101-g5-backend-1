@@ -7,7 +7,7 @@ from datetime import datetime
 
 from psycopg import sql
 
-from app.db import Conexao
+from app.db import Conexao, filtro_de_busca
 from app.emprestimos.esquemas import Emprestimo, EmprestimoResumo, Situacao
 
 # EmprestimoResumo (CT8): empréstimo com o nome do usuário e o título do livro.
@@ -20,6 +20,20 @@ SELECAO_RESUMO = sql.SQL(
 )
 # Ordem do CT8 (§6): mais recente primeiro, depois id decrescente.
 ORDEM_RESUMO = sql.SQL("ORDER BY e.emprestado_em DESC, e.id DESC")
+
+
+# CT8 em detalhe (§6): busca no nome do usuário ou no título do livro (não no CPF).
+COLUNAS_DA_BUSCA = ("u.nome", "l.titulo")
+
+
+def buscar_resumos(conexao: Conexao, termo: str | None) -> list[EmprestimoResumo]:
+    """Empréstimos (qualquer situação) cujo usuário ou livro casa com o termo, na ordem do CT8."""
+    onde = sql.SQL("")
+    if termo is not None:
+        onde = sql.SQL("WHERE {}").format(filtro_de_busca(COLUNAS_DA_BUSCA))
+    consulta = sql.SQL("{} {} {}").format(SELECAO_RESUMO, onde, ORDEM_RESUMO)
+    linhas = conexao.execute(consulta, {"termo": termo}).fetchall()
+    return [EmprestimoResumo(**linha) for linha in linhas]
 
 
 def resumos_dos_usuarios(conexao: Conexao, usuario_ids: Sequence[int]) -> list[EmprestimoResumo]:

@@ -103,6 +103,7 @@ Duplicidade de ISBN e CPF é avaliada **depois** da normalização: `978-0-00-00
 
 - "Ordem por título" (e "por nome") é alfabética sem diferenciar maiúsculas nem acentos (`álgebra`, `Banco`, `cálculo`, `Zoologia`); empate nesse critério → o texto exato por código de caractere; depois `id`. A ordem é a mesma em qualquer locale do servidor.
 - Os empréstimos dentro de cada usuário (CT4) seguem a ordem do CT8 e incluem todas as situações.
+- CT8 em detalhe: `status` aceita exatamente `ativo`, `devolvido` ou `atrasado` (minúsculas, depois de cortar os brancos das pontas); qualquer outro valor, inclusive `ATIVO`, NUL ou UTF-8 inválido → `STATUS_INVALIDO`. Ordem entre parâmetros: `status`, depois `busca`. O filtro usa a mesma situação efetiva da resposta (§7), com o mesmo "agora" do relógio. Sem paginação: `total` é o tamanho da lista devolvida. A busca procura no nome do usuário ou no título do livro (sem caixa nem acento, literais), não no CPF.
 - CT4 em detalhe: o usuário entra no resultado se o nome contém o termo (sem caixa nem acento, com `%`, `_` e `\` literais) **ou** se o termo tem ao menos um dígito e o CPF gravado contém a sequência de dígitos do termo (ex.: `123.456` → `123456`; `Lucas 1` procura `Lucas 1` no nome ou `1` no CPF). `total`, `pagina` e `tamanho` contam usuários, não empréstimos. `emprestimos` vem sempre presente (lista vazia se não houver), com objetos `EmprestimoResumo` iguais aos do CT8 e a situação efetiva do §7 calculada com o relógio da aplicação.
 - CT7 e CT8 não são paginados.
 
