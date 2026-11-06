@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 
 from psycopg import sql
 
 from app.db import Conexao
-from app.emprestimos.esquemas import EmprestimoResumo
+from app.emprestimos.esquemas import Emprestimo, EmprestimoResumo, Situacao
 
 # EmprestimoResumo (CT8): empréstimo com o nome do usuário e o título do livro.
 SELECAO_RESUMO = sql.SQL(
@@ -30,3 +31,24 @@ def resumos_dos_usuarios(conexao: Conexao, usuario_ids: Sequence[int]) -> list[E
     )
     linhas = conexao.execute(consulta, {"ids": list(usuario_ids)}).fetchall()
     return [EmprestimoResumo(**linha) for linha in linhas]
+
+
+def inserir(
+    conexao: Conexao,
+    *,
+    usuario_id: int,
+    livro_id: int,
+    emprestado_em: datetime,
+    data_limite_devolucao: datetime,
+) -> Emprestimo:
+    """Grava o empréstimo `ativo` (CT5)."""
+    linha = conexao.execute(
+        "INSERT INTO emprestimos"
+        " (usuario_id, livro_id, status, emprestado_em, data_limite_devolucao)"
+        " VALUES (%s, %s, %s, %s, %s)"
+        " RETURNING id, usuario_id, livro_id, status, emprestado_em, data_limite_devolucao,"
+        " devolvido_em",
+        (usuario_id, livro_id, Situacao.ATIVO.value, emprestado_em, data_limite_devolucao),
+    ).fetchone()
+    assert linha is not None
+    return Emprestimo(**linha)

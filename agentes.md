@@ -115,6 +115,8 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D17 | Testes de contrato semeiam dados sem `id` explícito (usar `RETURNING id`) | Revisor, E2 |
 | D18 | O schema é reaplicável (`IF NOT EXISTS`), mas não migra tabela existente: mudança de schema exige recriar o banco (documentar no README do E13; Compose do E12 aplica só em volume novo) | Revisor, E2 |
 | D19 | CI (E3): GitHub Actions em todo push e PR para `main`, Python 3.12 e 3.13, PostgreSQL 16 como serviço, ruff + pytest com cobertura mínima de 85%; `ruff` com versão exata no `pyproject.toml`. A prova de falha foi feita localmente (código de saída ≠ 0); a primeira execução no GitHub foi verde | Revisor, E3 |
+| D20 | Cliente do Backend 2 com `trust_env=False` (não herda proxy, `SSL_CERT_*` nem `.netrc` do ambiente); com `BACKEND2_CA_BUNDLE`, a verificação TLS fica sempre ligada; `ultimo_erro` com no máximo 200 caracteres e sem o payload; no reenvio, evento pulado por estar travado por outro reenvio conta como pendente (código 1) | Revisor, E9 |
+| D21 | Entrega ao Backend 2 é "pelo menos uma vez" e sem ordem garantida: o Backend 2 deve tolerar duplicatas (`tipo` + `emprestimoId`) e eventos fora de ordem (card #795, fora deste plano) | Revisor, E9 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 

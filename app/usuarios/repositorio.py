@@ -62,3 +62,8 @@ def contar(conexao: Conexao, termo: str | None, digitos: str | None) -> int:
     linha = conexao.execute(consulta, _parametros(termo, digitos)).fetchone()
     assert linha is not None
     return linha["total"]
+
+
+def existe(conexao: Conexao, usuario_id: int) -> bool:
+    linha = conexao.execute("SELECT 1 AS ok FROM usuarios WHERE id = %s", (usuario_id,)).fetchone()
+    return linha is not None

@@ -11,7 +11,9 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.types import Receive, Scope, Send
 
 from app.config import Config
+from app.emprestimos.rotas import roteador as rotas_emprestimos
 from app.erros import CapturaDeErroInterno, registrar_tratadores
+from app.eventos.publicador import PublicadorHttp
 from app.livros.rotas import roteador as rotas_livros
 from app.relogio import Relogio, RelogioSistema
 from app.usuarios.rotas import roteador as rotas_usuarios
@@ -59,6 +61,8 @@ def create_app(config: Config | None = None, relogio: Relogio | None = None) -> 
     )
     app.state.config = config
     app.state.relogio = relogio
+    # Cliente do Backend 2 (§8A); não abre conexão aqui, só a cada publicação.
+    app.state.publicador = PublicadorHttp(config)
 
     registrar_tratadores(app)
     # O último middleware adicionado fica por fora: CORS envolve a captura de erro interno.
@@ -76,5 +80,6 @@ def create_app(config: Config | None = None, relogio: Relogio | None = None) -> 
 
     app.include_router(rotas_livros)
     app.include_router(rotas_usuarios)
+    app.include_router(rotas_emprestimos)
 
     return app

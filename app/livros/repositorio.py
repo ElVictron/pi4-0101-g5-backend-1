@@ -78,3 +78,22 @@ def listar_disponiveis(conexao: Conexao, termo: str | None) -> list[Livro]:
         _COLUNAS, _onde(termo, _SO_DISPONIVEIS), _ORDEM
     )
     return [Livro(**linha) for linha in conexao.execute(consulta, {"termo": termo}).fetchall()]
+
+
+def existe(conexao: Conexao, livro_id: int) -> bool:
+    linha = conexao.execute("SELECT 1 AS ok FROM livros WHERE id = %s", (livro_id,)).fetchone()
+    return linha is not None
+
+
+def baixar_exemplar(conexao: Conexao, livro_id: int) -> int | None:
+    """Baixa atômica de um exemplar (P11); `None` se não havia exemplar disponível.
+
+    Numa corrida pelo último exemplar, a segunda transação espera a trava da linha e
+    reavalia `quantidade_disponivel > 0`: não acha linha e não baixa.
+    """
+    linha = conexao.execute(
+        "UPDATE livros SET quantidade_disponivel = quantidade_disponivel - 1"
+        " WHERE id = %s AND quantidade_disponivel > 0 RETURNING quantidade_disponivel",
+        (livro_id,),
+    ).fetchone()
+    return None if linha is None else linha["quantidade_disponivel"]

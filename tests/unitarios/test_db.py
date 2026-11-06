@@ -461,3 +461,65 @@ def test_ordem_alfabetica_aceita_coluna_qualificada_e_outro_desempate():
     texto = ordem_alfabetica("u.nome", desempate="u.id").as_string(None)
 
     assert texto == 'lower(unaccent("u"."nome")) COLLATE "C", "u"."nome" COLLATE "C", "u"."id"'
+
+
+# ----------------------------------------------- baixa atômica (P11) e trava do reenvio
+
+
+def test_baixa_de_exemplar_para_no_zero(limpo):
+    from app.livros import repositorio as livros
+
+    with transacao(limpo) as conexao:
+        livro_id = conexao.execute(
+            "INSERT INTO livros (titulo, autor, isbn, quantidade_exemplares, quantidade_disponivel)"
+            " VALUES ('T', 'A', '9780000000001', 2, 1) RETURNING id"
+        ).fetchone()["id"]
+        assert livros.baixar_exemplar(conexao, livro_id) == 0
+        assert livros.baixar_exemplar(conexao, livro_id) is None
+        assert livros.baixar_exemplar(conexao, 999_999) is None
+        assert livros.existe(conexao, livro_id) and not livros.existe(conexao, 999_999)
+
+
+def test_evento_travado_por_um_reenvio_e_pulado_pelo_outro(limpo):
+    from datetime import datetime
+
+    from app.eventos import repositorio as eventos
+
+    agora = datetime(2026, 10, 13, 19, 20)
+    with transacao(limpo) as conexao:
+        primeiro = eventos.inserir(conexao, {"tipo": "x"}, "timeout", agora)
+        segundo = eventos.inserir(conexao, {"tipo": "y"}, "HTTP 503", agora)
+
+    with transacao(limpo) as conexao_a, transacao(limpo) as conexao_b:
+        assert eventos.ids_em_ordem(conexao_a) == [primeiro, segundo]
+        travado = eventos.travar(conexao_a, primeiro)
+        assert travado == eventos.EventoPendente(primeiro, {"tipo": "x"}, 1)
+        assert eventos.travar(conexao_b, primeiro) is None
+        assert eventos.travar(conexao_b, segundo) is not None
+        eventos.registrar_falha(conexao_a, primeiro, "falha de conexão", agora)
+        eventos.apagar(conexao_b, segundo)
+
+    with transacao(limpo) as conexao:
+        linhas = conexao.execute(
+            "SELECT id, tentativas, ultimo_erro FROM eventos_pendentes ORDER BY id"
+        ).fetchall()
+    assert linhas == [{"id": primeiro, "tentativas": 2, "ultimo_erro": "falha de conexão"}]
+
+
+def test_ultimo_erro_gravado_no_maximo_com_200_caracteres(limpo):
+    from datetime import datetime
+
+    from app.eventos import repositorio as eventos
+
+    agora = datetime(2026, 10, 13, 19, 20)
+    with transacao(limpo) as conexao:
+        evento_id = eventos.inserir(conexao, {"tipo": "x"}, "a" * 300, agora)
+        gravado = conexao.execute(
+            "SELECT ultimo_erro FROM eventos_pendentes WHERE id = %s", (evento_id,)
+        ).fetchone()["ultimo_erro"]
+        eventos.registrar_falha(conexao, evento_id, "b" * 300, agora)
+        atualizado = conexao.execute(
+            "SELECT ultimo_erro FROM eventos_pendentes WHERE id = %s", (evento_id,)
+        ).fetchone()["ultimo_erro"]
+
+    assert (gravado, atualizado) == ("a" * 200, "b" * 200)
