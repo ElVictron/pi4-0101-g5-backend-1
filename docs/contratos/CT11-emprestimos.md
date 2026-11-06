@@ -17,10 +17,12 @@ Os campos gravados são os mesmos campos lidos.
 | id | inteiro | sim | 9001 |
 | usuario_id | inteiro | sim | 55 |
 | livro_id | inteiro | sim | 101 |
-| status | um de: ativo, devolvido, atrasado | sim | ativo |
+| status | um de: ativo, devolvido | sim | ativo |
 | emprestado_em | data e hora | sim | 2026-10-13T19:20:00 |
 | data_limite_devolucao | data e hora | sim | 2026-10-28T19:20:00 |
 | devolvido_em | data e hora | não | não tem |
+
+A situação `atrasado` não é armazenada nesta tabela. O Backend 1 a calcula para consulta conforme CT8: se o prazo passou e `devolvido_em` está vazio, CT8 retorna a situação efetiva `atrasado`, mesmo que o status persistido seja `ativo`. Ao registrar a devolução de um empréstimo ativo ou atrasado, CT6 grava o status `devolvido` e o horário de devolução.
 
 ## Erros
 
