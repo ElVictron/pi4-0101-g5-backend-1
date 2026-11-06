@@ -13,7 +13,7 @@ Implementar o Backend 1 (API REST em Python + PostgreSQL) a partir da especifica
 
 | Card | Título | Entra como |
 |---|---|---|
-| #779 H01.1 | Docs: decisões (Python, transporte, atraso, devolução) | E0 — só o que falta (o PR nº 1 já resolveu quase tudo); **transporte muda para HTTP (D10)** |
+| #779 H01.1 | Docs: decisões (Python, HTTPS/WSS, atraso, devolução) | E0 — só o que falta (o PR nº 1 já resolveu quase tudo) |
 | #781 H01.3 | Banco: script das tabelas e restrições | E2 |
 | #783 H01.5 | Infra: CI | E3 — **somente o repositório do Backend 1** |
 | #784 H02.1 | `cadastrarLivro` | E4 |
@@ -41,10 +41,11 @@ O Backend 2 é **simulado nos testes** (servidor HTTP falso que responde como o 
 ## 2. Fontes da verdade (ordem de precedência)
 
 1. **Contratos** `docs/contratos/CT1` a `CT11` (e o CT12 do repositório do Backend 2, só leitura, para o cliente de publicação).
-2. **ADRs** `docs/adr/0001` a `0004` (Python, PostgreSQL, WebSocket em Python; o 0003 está substituído).
-3. **Decisões registradas neste arquivo** (seção 4), que preenchem as lacunas da especificação.
-4. **Cards do OpenProject** (texto de "O que precisa existir").
-5. Fluxos E1 a E8 e visão geral (repositório do Frontend), só leitura.
+2. **Convenções** `docs/contratos/00-convencoes.md` (formato de erro, status HTTP, limites, datas; o CTn prevalece se divergir).
+3. **ADRs** `docs/adr/0001` a `0004` (Python, PostgreSQL, WebSocket em Python; o 0003 está substituído).
+4. **Decisões registradas neste arquivo** (seção 4), que preenchem as lacunas da especificação.
+5. **Cards do OpenProject** (texto de "O que precisa existir").
+6. Fluxos E1 a E8 e visão geral (repositório do Frontend), só leitura.
 
 Se duas fontes divergirem, vale a de menor número, e o PM registra a divergência na seção 4 e corrige o documento de menor precedência. **Nenhum agente decide sozinho uma divergência.**
 
@@ -100,11 +101,12 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D3 | `atrasado` **não é gravado**: a tabela `emprestimos` guarda só `ativo` e `devolvido`; `atrasado` é calculado na consulta (CT8, CT11) | CT8, CT11 (PR nº 1) |
 | D4 | Devolução aceita empréstimo `ativo` ou efetivamente `atrasado`; grava `devolvido` + `devolvido_em`; devolver de novo → `EMPRESTIMO_JA_DEVOLVIDO` | CT6 |
 | D5 | Backend 1 é o único que acessa as tabelas `livros`, `usuarios`, `emprestimos` | CT9–CT11 |
-| D6 | Backend 1 publica eventos no Backend 2 por **HTTP** (`POST /eventos/biblioteca`, CT12; ver D10) depois de gravar; se o Backend 2 estiver fora, a operação **não falha**: o dado fica gravado e o evento falho é guardado para nova tentativa | Cards #793, #798; CT12 |
+| D6 | Backend 1 publica eventos no Backend 2 por HTTPS (`POST /eventos/biblioteca`, CT12) depois de gravar; se o Backend 2 estiver fora, a operação **não falha**: o dado fica gravado e o evento falho é guardado para nova tentativa | Cards #793, #798; CT12 |
 | D7 | Uma **branch separada** para toda a implementação; **cada entregável = 1 commit**; todo entregável tem testes unitários **e** passa nos testes do agente de teste | Pedido do Victor |
 | D8 | Backend 2 é simulado nos testes; nada deste plano altera o repositório do Backend 2 ou do Frontend | Pedido do Victor |
 | D9 | PM orquestra; agentes de Teste, Backend e Revisor (3.4) | Pedido do Victor |
-| D10 | **Transporte HTTP, sem TLS.** Frontend → Backend 1 e Backend 1 → Backend 2 usam HTTP; Backend 2 → Frontend usa WebSocket simples (`ws://`), não WSS. Vale para testes, Compose e demonstração | Pedido do Victor, 06/11/2026 |
+| D10 | **Transporte HTTPS** entre os serviços e **WSS** do Backend 2 para o Frontend, como nas fichas. (Uma versão do plano com HTTP foi descartada pelo Victor em 06/11/2026.) | Pedido do Victor, 06/11/2026 |
+| D11 | As lacunas P1–P14 estão detalhadas, com números e precedência de erros, em `docs/contratos/00-convencoes.md` | E0 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
@@ -119,11 +121,11 @@ Lacunas da especificação fechadas por esta tabela. Valem como decisões, e a E
 | P5 | **Limites numéricos** ("limite permitido") | `busca`: até 100 caracteres; `pagina` ≥ 1 (padrão 1); `tamanho` de 1 a 100 (padrão 20); `quantidadeExemplares` inteiro ≥ 1 |
 | P6 | **ISBN** | Só dígitos, 10 ou 13 (hífens e espaços removidos antes de validar e gravar). **Sem** conferir dígito verificador |
 | P7 | **CPF** | 11 dígitos numéricos (pontos e traço removidos). **Sem** conferir dígitos verificadores: o CPF de exemplo dos contratos (`12345678900`) é inválido pelo cálculo e quebraria os próprios exemplos |
-| P8 | **Contato** | E-mail válido (regra simples) **ou** telefone com 10 ou 11 dígitos; até 120 caracteres |
+| P8 | **Contato** | E-mail válido (regra simples) **ou** telefone de 10 a 13 dígitos (aceita `+55`); até 120 caracteres (regra exata em `00-convencoes.md`) |
 | P9 | **Datas e fuso** (exemplos sem fuso) | Datas sem fuso, no horário de `America/Sao_Paulo`; o "agora" vem de um relógio injetável (`Clock`) para testar atraso sem esperar 15 dias |
 | P10 | **Guardar evento que falhou** (ficha: "guarda o evento"; CT12: "retry manual"; nenhum define onde) | Tabela nova `eventos_pendentes` (id, payload JSON, tentativas, criado_em, ultimo_erro) criada em `db/schema.sql`, mais um comando `python -m app.reenviar_eventos`. Sem endpoint HTTP novo, então nenhum contrato novo |
 | P11 | **Atomicidade** de estoque | `UPDATE livros SET quantidade_disponivel = quantidade_disponivel - 1 WHERE id = ? AND quantidade_disponivel > 0` dentro da transação do empréstimo; teste de concorrência obrigatório |
-| P12 | **Transporte do Backend 1** (substitui a versão com TLS opcional; ver D10) | HTTP puro, sem certificados, sem configuração de TLS no Uvicorn. O código não tem caminho para TLS neste plano; se o professor exigir HTTPS, vira entregável novo (colocar um proxy reverso com TLS na frente, sem mexer na aplicação) |
+| P12 | **HTTPS do Backend 1** | Aplicação fala HTTP internamente; TLS ligado por variáveis de ambiente (`SSL_CERTFILE`, `SSL_KEYFILE`) no Uvicorn. Testes chamam a aplicação dentro do processo, sem TLS. Cliente do Backend 2 com verificação de certificado ligada e `BACKEND2_CA_BUNDLE` para certificado próprio |
 | P13 | **CORS** (Frontend em outra origem) | Origens permitidas por variável de ambiente `CORS_ORIGENS` |
 | P14 | **Inconsistências a corrigir na E0** | CT5 ainda lista `atrasado` como status possível na saída; deve ficar `ativo, devolvido` como o CT11. O card #781 (texto do OpenProject) ainda pede `atrasado` na restrição de `status`: o schema segue o CT11, e o card precisa ser atualizado pelo grupo (fora deste repositório) |
 
@@ -197,7 +199,6 @@ Ordem de execução. Cada um é um commit.
 ### E0 — Fechar a especificação (card #779) · `docs`
 - Corrigir CT5 (status de saída), conferir CT6/CT8/CT11/CT12 contra a regra D3/D4.
 - Gravar as decisões P1 a P14 aprovadas neste arquivo (ou em `docs/decisoes.md`, se o Victor preferir separar) e atualizar os contratos que mencionam limites (CT1–CT4, CT7, CT8) com os números de P5 a P8.
-- **Transporte HTTP (D10):** trocar `Fronteira | HTTPS` por `HTTP` na tabela de CT1 a CT8; ajustar a frase de transporte nos ADRs/visão geral **apenas se o Victor mandar** (a visão geral está no repositório do Frontend, fora do escopo, e o ADR 0004 cita WSS). Registrar a divergência com o card #779, que diz que HTTP/WebSocket no Compose local só vale com aprovação do professor e fichas ajustadas.
 - **Sem código, sem teste de código.** Critério: o agente de teste consegue escrever qualquer teste seguinte sem inventar número, formato ou status HTTP.
 
 ### E1 — Esqueleto do projeto · `chore`
@@ -292,21 +293,21 @@ docs/                contratos, ADRs (já existem)
 **Quem fala o quê.** O WebSocket não passa pelo Backend 1.
 
 ```
-Frontend ──HTTP──► Backend 1 ──SQL──► PostgreSQL
+Frontend ──HTTPS──► Backend 1 ──SQL──► PostgreSQL
                        │
-                       └──HTTP (CT12: POST /eventos/biblioteca)──► Backend 2 ──WebSocket ws:// (CT13)──► Frontend
+                       └──HTTPS (CT12: POST /eventos/biblioteca)──► Backend 2 ──WSS (CT13)──► Frontend
 ```
 
-- **Backend 1 → Backend 2:** requisição **HTTP** comum, `POST /eventos/biblioteca` (CT12).
-- **Backend 2 → Frontend:** **WebSocket simples (`ws://`)** com o evento `bibliotecaAtualizada` (CT13), conforme D10. Isso é do Backend 2 e fica fora deste plano.
+- **Backend 1 → Backend 2:** requisição **HTTPS** comum, `POST /eventos/biblioteca` (CT12).
+- **Backend 2 → Frontend:** **WebSocket seguro (WSS)** com o evento `bibliotecaAtualizada` (CT13). Isso é do Backend 2 e fica fora deste plano.
 - Logo, o Backend 1 não abre, não aceita e não mantém conexão WebSocket. O que ele precisa deixar pronto é um **cliente HTTP fiel ao CT12**.
 
 **O que o Backend 1 deixa "no jeito" para a integração:**
 
 | Item | Como fica |
 |---|---|
-| Endereço do Backend 2 | Variável `BACKEND2_URL` (ex.: `http://backend2:8000`), sem valor fixo no código |
-| Transporte | HTTP, sem certificado nem verificação TLS; nenhuma variável de TLS existe neste plano (D10) |
+| Endereço do Backend 2 | Variável `BACKEND2_URL` (ex.: `https://backend2:8443`), sem valor fixo no código |
+| TLS | `BACKEND2_CA_BUNDLE` (certificado próprio do Compose) e `BACKEND2_VERIFY_TLS`; nunca desligar a verificação por padrão |
 | Timeout | `BACKEND2_TIMEOUT_SEGUNDOS` (padrão 3), para o empréstimo não ficar preso se o Backend 2 travar |
 | Payload | Exatamente os campos do CT12: `tipo` (`emprestimo_registrado` ou `devolucao_registrada`), `livroId`, `usuarioId`, `emprestimoId`, `status`, `quantidadeDisponivel`, `atualizadaEm` |
 | Resposta esperada | `{"aceito": true, "eventoId": "..."}`; qualquer outra coisa (erro HTTP, timeout, conexão recusada, `aceito` falso) conta como falha |
@@ -315,13 +316,9 @@ Frontend ──HTTP──► Backend 1 ──SQL──► PostgreSQL
 | Teste de fidelidade ao CT12 | Os testes validam o payload enviado campo a campo contra o CT12 (tipos, obrigatoriedade, valores permitidos); se o CT12 mudar, o teste quebra |
 | Servidor falso | Nos testes, um servidor HTTP local responde como o CT12 (sucesso, `EVENTO_INVALIDO`, `EVENTO_NAO_PUBLICADO`, lento, fora do ar) |
 
-**Fica para depois (card #795, fora do plano):** subir Backend 1, Backend 2, Frontend e PostgreSQL juntos e conferir que um empréstimo numa aba muda a quantidade no painel de outra aba. A única mudança esperada no Backend 1 nessa hora é apontar `BACKEND2_URL` para o contêiner real.
+**Fica para depois (card #795, fora do plano):** subir Backend 1, Backend 2, Frontend e PostgreSQL juntos e conferir que um empréstimo numa aba muda a quantidade no painel de outra aba. A única mudança esperada no Backend 1 nessa hora é apontar `BACKEND2_URL` e o certificado para o contêiner real.
 
 **Ponto de atenção para o Victor:** o CT12 define o retorno do Backend 2 como `aceito` + `eventoId`, e `status` aceita `atrasado` no evento. Como `atrasado` não é gravado (D3) e os dois eventos do Backend 1 são de empréstimo e devolução, o Backend 1 só enviará `ativo` ou `devolvido`. Se o Backend 2 quiser tratar `atrasado`, é decisão do lado dele.
-
----
-
-**Atenção (D10):** HTTP/ws:// diverge da visão geral, do ADR 0004 e do texto original das fichas ("protegido por HTTPS e WSS"). O card #779 só aceita isso com aprovação do professor e fichas ajustadas. Este plano segue a ordem do Victor; a aprovação do professor é pendência do grupo, não do código.
 
 ---
 
@@ -338,7 +335,6 @@ Frontend ──HTTP──► Backend 1 ──SQL──► PostgreSQL
 | Backend 2 inexistente | Servidor falso nos testes (D8); integração real fica fora do plano |
 | Sem Docker neste ambiente | PostgreSQL local para testes (P3); E12 declarada com verificação parcial |
 | `initdb` recusa rodar como root | `scripts/test-db.sh` roda o cluster com usuário não-root; validado na E1 antes de seguir |
-| Professor exigir HTTPS depois | Aplicação sem TLS embutido; proxy reverso com TLS na frente resolve sem alterar o código (entregável novo) |
 | Push com proxy instável | `fetch` antes do push; um push por entregável |
 
 ---
@@ -347,10 +343,10 @@ Frontend ──HTTP──► Backend 1 ──SQL──► PostgreSQL
 
 | Item | Situação |
 |---|---|
-| Plano | Aprovado com 3 agentes; aguardando ordem de início |
+| Plano | Aprovado com 3 agentes; implementação iniciada em 06/11/2026 |
 | Decisões P1–P14 | **Aprovadas** |
 | Revisor (3.4) | **Ativo** (aprovado) |
-| Branch `feat/backend-1-implementacao` | Criada só para guardar este plano; **nenhum código nela ainda** |
-| Implementação | **Não iniciada** |
+| Branch `feat/backend-1-implementacao` | Em uso |
+| Implementação | Em andamento; progresso por entregável no histórico de commits da branch |
 
 Quando o Victor liberar: começar pela E0 nesta mesma branch e seguir a ordem da seção 7.

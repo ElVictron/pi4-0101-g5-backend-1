@@ -7,6 +7,7 @@
 | Quem responde | Backend 1 |
 | Atende | E3 |
 | Como chamar | `POST /usuarios` |
+| Convenções | Formato de erro, status HTTP, limites e datas em [00-convencoes.md](00-convencoes.md) |
 
 ## Entrada
 
@@ -30,5 +31,5 @@
 | Quando | O que volta |
 |---|---|
 | CPF já cadastrado | Erro `CPF_DUPLICADO` |
-| CPF ou contato inválido | Erro `DADOS_INVALIDOS` |
+| CPF sem 11 dígitos, contato que não é e-mail nem telefone, nome acima de 150 caracteres, ou campo com tipo errado | Erro `DADOS_INVALIDOS` |
 | Campo obrigatório ausente | Erro `CAMPOS_OBRIGATORIOS` |

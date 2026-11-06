@@ -7,6 +7,7 @@
 | Quem responde | Backend 1 |
 | Atende | E6 |
 | Como chamar | `PATCH /emprestimos/{emprestimoId}/devolucao` |
+| Convenções | Formato de erro, status HTTP, limites e datas em [00-convencoes.md](00-convencoes.md) |
 
 ## Entrada
 
@@ -20,6 +21,7 @@
 - A devolução é permitida para um empréstimo com status efetivo `ativo` ou `atrasado`, desde que ainda não tenha sido devolvido.
 - Ao concluir, o Backend 1 registra `devolvidoEm`, grava o status `devolvido` e atualiza a quantidade disponível do livro.
 - Um empréstimo já devolvido não pode ser devolvido novamente.
+- Depois de gravar, publica `devolucao_registrada` no Backend 2 (CT12), com a mesma regra de falha do CT5.
 
 ## Saída
 

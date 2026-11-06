@@ -7,6 +7,7 @@
 | Quem responde | Backend 1 |
 | Atende | E8 |
 | Como chamar | `GET /emprestimos?status={status}&busca={busca}` |
+| Convenções | Formato de erro, status HTTP, limites e datas em [00-convencoes.md](00-convencoes.md) |
 
 ## Entrada
 
@@ -51,4 +52,4 @@ Assim, um empréstimo vencido e ainda não devolvido aparece como `atrasado`, me
 | Quando | O que volta |
 |---|---|
 | Status inválido | Erro `STATUS_INVALIDO` |
-| Busca maior que o limite permitido | Erro `BUSCA_INVALIDA` |
+| Busca com mais de 100 caracteres | Erro `BUSCA_INVALIDA` |
