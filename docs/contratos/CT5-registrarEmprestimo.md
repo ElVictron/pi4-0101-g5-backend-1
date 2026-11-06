@@ -38,6 +38,10 @@
 | Campo obrigatório ausente | Erro `CAMPOS_OBRIGATORIOS` |
 | `usuarioId` ou `livroId` não é inteiro maior que zero | Erro `DADOS_INVALIDOS` |
 
+## Ordem dos erros de negócio
+
+Depois das validações de entrada (00-convencoes §4), nesta ordem: usuário inexistente → `USUARIO_NAO_ENCONTRADO`; livro inexistente → `LIVRO_NAO_ENCONTRADO`; livro sem exemplar disponível → `LIVRO_INDISPONIVEL`.
+
 ## Efeitos
 
 - Grava o empréstimo com status `ativo` e `dataLimiteDevolucao` = `emprestadoEm` + 15 dias.

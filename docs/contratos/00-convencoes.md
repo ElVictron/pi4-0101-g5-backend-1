@@ -103,6 +103,7 @@ Duplicidade de ISBN e CPF é avaliada **depois** da normalização: `978-0-00-00
 
 - "Ordem por título" (e "por nome") é alfabética sem diferenciar maiúsculas nem acentos (`álgebra`, `Banco`, `cálculo`, `Zoologia`); empate nesse critério → o texto exato por código de caractere; depois `id`. A ordem é a mesma em qualquer locale do servidor.
 - Os empréstimos dentro de cada usuário (CT4) seguem a ordem do CT8 e incluem todas as situações.
+- CT4 em detalhe: o usuário entra no resultado se o nome contém o termo (sem caixa nem acento, com `%`, `_` e `\` literais) **ou** se o termo tem ao menos um dígito e o CPF gravado contém a sequência de dígitos do termo (ex.: `123.456` → `123456`; `Lucas 1` procura `Lucas 1` no nome ou `1` no CPF). `total`, `pagina` e `tamanho` contam usuários, não empréstimos. `emprestimos` vem sempre presente (lista vazia se não houver), com objetos `EmprestimoResumo` iguais aos do CT8 e a situação efetiva do §7 calculada com o relógio da aplicação.
 - CT7 e CT8 não são paginados.
 
 ## 7. Datas e situação do empréstimo
@@ -122,6 +123,10 @@ Duplicidade de ISBN e CPF é avaliada **depois** da normalização: `978-0-00-00
 - Em caso de falha, a operação do cliente **não** falha: a resposta continua de sucesso e o evento é gravado em `eventos_pendentes`.
 - `eventos_pendentes`: `id`, `payload` (JSON do CT12), `tentativas` (começa em 1), `ultimo_erro` (texto), `criado_em`, `atualizado_em`.
 - `python -m app.reenviar_eventos` tenta reenviar cada pendente na ordem de criação; apaga a linha em caso de sucesso; em caso de falha, soma 1 em `tentativas` e atualiza `ultimo_erro`. Termina com código de saída 0 se todos foram enviados, 1 se algum continuou pendente.
+- Detalhes da chamada: `Content-Type: application/json`; `BACKEND2_URL` sem a barra final (se vier com barra, ela é removida); `atualizadaEm` = o mesmo instante gravado na operação (`emprestadoEm` ou `devolvidoEm`); `quantidadeDisponivel` = o valor do livro **depois** da operação; `usuarioId` e `emprestimoId` sempre enviados.
+- Em `eventos_pendentes`, `criado_em` e `atualizado_em` vêm do relógio da aplicação; `ultimo_erro` é um texto curto, não vazio, que descreve a falha (ex.: `timeout`, `falha de conexão`, `HTTP 503`, `resposta inválida`, `BACKEND2_URL não configurado`) sem dados pessoais nem segredos.
+- Se a gravação em `eventos_pendentes` também falhar, a resposta ao cliente continua de sucesso (a operação já foi confirmada) e a falha é registrada no log sem dados pessoais.
+- Uma única tentativa por operação; não há nova tentativa automática dentro da requisição.
 - TLS com o Backend 2: verificação sempre ligada por padrão (`BACKEND2_VERIFY_TLS=true`); certificado próprio por `BACKEND2_CA_BUNDLE`.
 
 ## 9. Rotas de infraestrutura

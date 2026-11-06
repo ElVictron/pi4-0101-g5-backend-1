@@ -202,3 +202,147 @@ def test_servico_grava_com_o_instante_do_relogio_dentro_da_transacao(monkeypatch
 
 def test_servico_mapeia_so_a_restricao_de_cpf():
     assert dict(servico.ERROS_POR_RESTRICAO) == {"usuarios_cpf_unico": CodigoErro.CPF_DUPLICADO}
+
+
+# ----------------------------------------------- CT4 consultarUsuarios (sem banco)
+
+
+@pytest.mark.parametrize(
+    ("termo", "esperado"),
+    [
+        (None, None),
+        ("Lucas", None),
+        ("123.456", "123456"),
+        ("Lucas 1", "1"),
+        ("\u0661\u0662", None),  # dígitos não ASCII não contam
+        ("a1b2-3", "123"),
+    ],
+)
+def test_digitos_do_termo(termo, esperado):
+    assert servico.digitos_do_termo(termo) == esperado
+
+
+def test_where_da_consulta_de_usuarios():
+    from app.usuarios import repositorio
+
+    assert repositorio._onde(None, None).as_string(None) == ""
+    so_nome = repositorio._onde("Lucas", None).as_string(None)
+    com_cpf = repositorio._onde("Lucas 1", "1").as_string(None)
+
+    assert so_nome.count("LIKE") == 1 and "cpf" not in so_nome
+    assert com_cpf.endswith(") OR cpf LIKE %(padrao_cpf)s")
+    assert repositorio._parametros("Lucas 1", "1") == {"termo": "Lucas 1", "padrao_cpf": "%1%"}
+    assert repositorio._parametros("Lucas", None) == {"termo": "Lucas", "padrao_cpf": None}
+
+
+def test_ordem_dos_usuarios_e_alfabetica_por_nome():
+    from app.usuarios import repositorio
+
+    assert repositorio._ORDEM.as_string(None) == (
+        'ORDER BY lower(unaccent("nome")) COLLATE "C", "nome" COLLATE "C", "id"'
+    )
+
+
+def test_consulta_agrupa_emprestimos_por_usuario_sem_n_mais_1(monkeypatch):
+    from app.emprestimos.esquemas import EmprestimoResumo
+    from app.parametros import ConsultaPaginada
+
+    ana = Usuario(2, "Ana", "98765432100", "a@b.co", INSTANTE)
+    lucas = Usuario(1, "Lucas", "12345678900", "l@b.co", INSTANTE)
+    e1 = EmprestimoResumo(10, 1, "Lucas", 7, "L", INSTANTE, INSTANTE, None)
+    e2 = EmprestimoResumo(9, 1, "Lucas", 8, "M", INSTANTE, INSTANTE, None)
+    chamadas = []
+
+    @contextmanager
+    def transacao_falsa(config, *, somente_leitura=False):
+        chamadas.append(("abre", somente_leitura))
+        yield "conexao"
+        chamadas.append(("fecha",))
+
+    def buscar(conexao, termo, digitos, *, limite, deslocamento):
+        chamadas.append(("buscar", termo, digitos, limite, deslocamento))
+        return [ana, lucas]
+
+    def contar(conexao, termo, digitos):
+        chamadas.append(("contar", termo, digitos))
+        return 2
+
+    def resumos(conexao, ids):
+        chamadas.append(("emprestimos", ids))
+        return [e1, e2]
+
+    monkeypatch.setattr(servico, "transacao", transacao_falsa)
+    monkeypatch.setattr(servico.repositorio, "buscar", buscar)
+    monkeypatch.setattr(servico.repositorio, "contar", contar)
+    monkeypatch.setattr(servico.repositorio_emprestimos, "resumos_dos_usuarios", resumos)
+
+    pagina = servico.consultar_usuarios(
+        Config(database_url="postgresql://x/y_teste"),
+        RelogioFixo(INSTANTE),
+        ConsultaPaginada("123.4", 2, 5),
+    )
+
+    assert pagina.total == 2
+    assert pagina.agora == INSTANTE
+    assert [(i.usuario, i.emprestimos) for i in pagina.usuarios] == [(ana, []), (lucas, [e1, e2])]
+    assert chamadas == [
+        ("abre", True),
+        ("buscar", "123.4", "1234", 5, 5),
+        ("contar", "123.4", "1234"),
+        ("emprestimos", [2, 1]),
+        ("fecha",),
+    ]
+
+
+def test_rota_de_consulta_monta_usuario_resumo(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.emprestimos.esquemas import EmprestimoResumo
+    from app.main import create_app
+
+    recebidas = []
+    lucas = Usuario(1, "Lucas", "12345678900", "l@b.co", INSTANTE)
+    limite = datetime(2026, 10, 28, 19, 20)
+    emprestimo = EmprestimoResumo(10, 1, "Lucas", 7, "Livro", INSTANTE, limite, None)
+
+    def consultar(config, relogio, consulta):
+        recebidas.append(consulta)
+        return servico.PaginaDeUsuarios(
+            usuarios=[servico.UsuarioComEmprestimos(lucas, [emprestimo])],
+            total=1,
+            agora=datetime(2026, 10, 28, 19, 20, 1),
+        )
+
+    monkeypatch.setattr(servico, "consultar_usuarios", consultar)
+    app = create_app(config=Config(database_url="postgresql://x/y_teste"))
+    with TestClient(app) as cliente:
+        resposta = cliente.get("/usuarios?busca=+lu+&pagina=01&tamanho=5&x=%00")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {
+        "usuarios": [
+            {
+                "id": 1,
+                "nome": "Lucas",
+                "cpf": "12345678900",
+                "contato": "l@b.co",
+                "emprestimos": [
+                    {
+                        "emprestimoId": 10,
+                        "usuarioId": 1,
+                        "usuarioNome": "Lucas",
+                        "livroId": 7,
+                        "livroTitulo": "Livro",
+                        "status": "atrasado",
+                        "emprestadoEm": "2026-10-13T19:20:00",
+                        "dataLimiteDevolucao": "2026-10-28T19:20:00",
+                        "devolvidoEm": None,
+                    }
+                ],
+            }
+        ],
+        "total": 1,
+        "pagina": 1,
+        "tamanho": 5,
+    }
+    assert [(c.busca, c.pagina, c.tamanho) for c in recebidas] == [("lu", 1, 5)]
