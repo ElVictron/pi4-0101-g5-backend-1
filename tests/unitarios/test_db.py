@@ -8,6 +8,7 @@ apagam o banco uma da outra. Só roda em banco cujo nome termina em `_teste`.
 
 import os
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,7 +19,15 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from app import db as modulo_db
 from app.config import Config
-from app.db import CAMINHO_SCHEMA, aplicar_schema, conectar, transacao, violacoes_como_erro
+from app.db import (
+    CAMINHO_SCHEMA,
+    aplicar_schema,
+    conectar,
+    filtro_de_busca,
+    ordem_alfabetica,
+    transacao,
+    violacoes_como_erro,
+)
 from app.erros import CodigoErro, ErroDominio
 
 pytestmark = pytest.mark.unitario
@@ -26,6 +35,7 @@ pytestmark = pytest.mark.unitario
 RAIZ = Path(__file__).resolve().parents[2]
 SUFIXO_DE_TESTE = "_teste"
 SUFIXO_BANCO_PROPRIO = "_db_teste"
+SUFIXO_BANCO_CTYPE_C = "_db_c_teste"
 TABELAS = {"livros", "usuarios", "emprestimos", "eventos_pendentes"}
 RESTRICOES = {
     "livros_isbn_unico",
@@ -81,7 +91,7 @@ def test_nome_do_banco_proprio_deriva_do_banco_de_teste(base, esperado):
     assert nome_do_banco_proprio(base) == esperado
 
 
-@pytest.mark.parametrize("base", [None, "", "biblioteca", "producao", "x_db_teste"])
+@pytest.mark.parametrize("base", [None, "", "biblioteca", "producao", "x_db_teste", "x_db_c_teste"])
 def test_nome_do_banco_proprio_recusa_base_que_nao_e_de_teste(base):
     with pytest.raises(ValueError):
         nome_do_banco_proprio(base)
@@ -100,21 +110,22 @@ def _url_do_servidor_de_teste() -> str:
     return saida.stdout.strip()
 
 
-def nome_do_banco_proprio(nome_base: str | None) -> str:
-    """`<nome_base>_db_teste`; recusa base que não seja banco de teste."""
+def nome_do_banco_proprio(nome_base: str | None, sufixo: str = SUFIXO_BANCO_PROPRIO) -> str:
+    """`<nome_base><sufixo>`; recusa base que não seja banco de teste ou que já seja próprio."""
+    assert sufixo.endswith(SUFIXO_DE_TESTE)
     if not nome_base or not nome_base.endswith(SUFIXO_DE_TESTE):
         raise ValueError(f"O banco de teste deve terminar em '{SUFIXO_DE_TESTE}': {nome_base!r}")
-    if nome_base.endswith(SUFIXO_BANCO_PROPRIO):
+    if nome_base.endswith((SUFIXO_BANCO_PROPRIO, SUFIXO_BANCO_CTYPE_C)):
         raise ValueError(f"A base já é um banco próprio deste módulo: {nome_base!r}")
-    return nome_base + SUFIXO_BANCO_PROPRIO
+    return nome_base + sufixo
 
 
-@pytest.fixture(scope="module")
-def config_banco_proprio():
-    """Cria `<banco de teste>_db_teste` vazio no servidor e o apaga no fim do módulo."""
+@contextmanager
+def _banco_proprio(sufixo: str, *, locale_c: bool = False):
+    """Cria `<banco de teste><sufixo>` vazio no servidor de teste e o apaga ao final."""
     url_base = _url_do_servidor_de_teste()
     try:
-        nome_banco = nome_do_banco_proprio(conninfo_to_dict(url_base).get("dbname"))
+        nome_banco = nome_do_banco_proprio(conninfo_to_dict(url_base).get("dbname"), sufixo)
     except ValueError as exc:
         pytest.fail(str(exc))
     try:
@@ -123,11 +134,33 @@ def config_banco_proprio():
         pytest.skip(f"Banco de teste indisponível (rode scripts/test-db.sh start): {exc}")
 
     nome = sql.Identifier(nome_banco)
+    criar = sql.SQL("CREATE DATABASE {}").format(nome)
+    if locale_c:
+        criar = sql.SQL(
+            "CREATE DATABASE {} TEMPLATE template0 ENCODING 'UTF8' LC_COLLATE 'C' LC_CTYPE 'C'"
+        ).format(nome)
     with admin:
         admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(nome))
-        admin.execute(sql.SQL("CREATE DATABASE {}").format(nome))
-        yield Config(database_url=make_conninfo(url_base, dbname=nome_banco))
-        admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(nome))
+        admin.execute(criar)
+        try:
+            yield Config(database_url=make_conninfo(url_base, dbname=nome_banco))
+        finally:
+            admin.execute(sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(nome))
+
+
+@pytest.fixture(scope="module")
+def config_banco_proprio():
+    with _banco_proprio(SUFIXO_BANCO_PROPRIO) as config:
+        yield config
+
+
+@pytest.fixture(scope="module")
+def config_locale_c():
+    """Banco com LC_COLLATE e LC_CTYPE `C`, já com o schema (para provar a independência do
+    locale exigida pelo §6)."""
+    with _banco_proprio(SUFIXO_BANCO_CTYPE_C, locale_c=True) as config:
+        aplicar_schema(config)
+        yield config
 
 
 @pytest.fixture(scope="module")
@@ -287,3 +320,144 @@ def test_violacao_real_mapeada_desfaz_a_transacao(limpo):
 
     assert erro.value.codigo is CodigoErro.ISBN_DUPLICADO
     assert _contar_livros(limpo) == 1
+
+
+# ----------------------------------------------- filtro_de_busca e somente leitura (§6)
+
+
+@pytest.fixture
+def livros_para_busca(limpo):
+    titulos = [
+        "Informação e Sociedade",
+        "PYTHON 100%",
+        "Guia_Rapido",
+        "Barra \\ Invertida",
+        "O'Reilly",
+        "Sem Relação",
+    ]
+    with transacao(limpo) as conexao:
+        for numero, titulo in enumerate(titulos):
+            _inserir_livro_com_titulo(conexao, titulo, f"97800000000{numero:02d}")
+    return limpo
+
+
+def _inserir_livro_com_titulo(conexao, titulo: str, isbn: str) -> None:
+    conexao.execute(
+        "INSERT INTO livros (titulo, autor, isbn, quantidade_exemplares, quantidade_disponivel)"
+        " VALUES (%s, 'Autor', %s, 1, 1)",
+        (titulo, isbn),
+    )
+
+
+def _titulos_achados(config: Config, termo: str) -> list[str]:
+    consulta = sql.SQL("SELECT titulo FROM livros WHERE {} ORDER BY titulo").format(
+        filtro_de_busca(["titulo"])
+    )
+    with transacao(config, somente_leitura=True) as conexao:
+        return [linha["titulo"] for linha in conexao.execute(consulta, {"termo": termo})]
+
+
+@pytest.mark.parametrize(
+    ("termo", "esperados"),
+    [
+        ("informacao", ["Informação e Sociedade"]),
+        ("INFORMAÇÃO", ["Informação e Sociedade"]),
+        ("ção e soc", ["Informação e Sociedade"]),
+        ("python", ["PYTHON 100%"]),
+        ("%", ["PYTHON 100%"]),
+        ("0%", ["PYTHON 100%"]),
+        ("%%", []),
+        ("_", ["Guia_Rapido"]),
+        ("a_r", ["Guia_Rapido"]),
+        ("o_r", []),
+        ("\\", ["Barra \\ Invertida"]),
+        ("\\ i", ["Barra \\ Invertida"]),
+        ("\\%", []),
+        ("'", ["O'Reilly"]),
+        ("'; DROP TABLE livros; --", []),
+    ],
+)
+def test_filtro_de_busca_literal_sem_acento_nem_maiuscula(livros_para_busca, termo, esperados):
+    assert _titulos_achados(livros_para_busca, termo) == esperados
+
+
+def test_filtro_de_busca_em_varias_colunas_usa_or():
+    texto = filtro_de_busca(["titulo", "autor"]).as_string(None)
+
+    assert texto.count("LIKE") == 2
+    assert " OR " in texto
+    assert '"titulo"' in texto and '"autor"' in texto
+    assert "%(termo)s" in texto
+
+
+def test_transacao_somente_leitura_recusa_escrita_e_usa_repeatable_read(limpo):
+    with (
+        pytest.raises(errors.ReadOnlySqlTransaction),
+        transacao(limpo, somente_leitura=True) as conexao,
+    ):
+        nivel = conexao.execute("SHOW transaction_isolation").fetchone()
+        assert nivel == {"transaction_isolation": "repeatable read"}
+        _inserir_livro(conexao)
+
+    assert _contar_livros(limpo) == 0
+
+
+# ----------------------------------------------- ordem alfabética do §6 (título/nome)
+
+TITULOS_MISTURADOS = ["Zoologia", "cálculo", "Banco", "álgebra", "Álgebra", "algebra", "Cálculo"]
+# Sem caixa nem acento: algebra < banco < calculo < zoologia; empate → código de caractere
+# ('a' 0x61 < 'Á' 0xC1 < 'á' 0xE1; 'C' 0x43 < 'c' 0x63).
+ORDEM_ESPERADA = ["algebra", "Álgebra", "álgebra", "Banco", "Cálculo", "cálculo", "Zoologia"]
+
+
+def _titulos_em_ordem(config: Config) -> list[str]:
+    with transacao(config) as conexao:
+        conexao.execute(
+            "TRUNCATE livros, usuarios, emprestimos, eventos_pendentes RESTART IDENTITY CASCADE"
+        )
+        for numero, titulo in enumerate(TITULOS_MISTURADOS):
+            _inserir_livro_com_titulo(conexao, titulo, f"97900000000{numero:02d}")
+        consulta = sql.SQL("SELECT titulo FROM livros ORDER BY {}").format(
+            ordem_alfabetica("titulo")
+        )
+        return [linha["titulo"] for linha in conexao.execute(consulta)]
+
+
+def test_ordem_alfabetica_sem_caixa_nem_acento_e_desempate_por_codigo(config):
+    assert _titulos_em_ordem(config) == ORDEM_ESPERADA
+
+
+def test_ordem_alfabetica_igual_com_locale_c(config_locale_c):
+    with conectar(config_locale_c) as conexao:
+        locale = conexao.execute(
+            "SELECT datcollate, datctype FROM pg_database WHERE datname = current_database()"
+        ).fetchone()
+        assert locale == {"datcollate": "C", "datctype": "C"}
+
+    assert _titulos_em_ordem(config_locale_c) == ORDEM_ESPERADA
+
+
+def test_busca_sem_acento_funciona_com_locale_c(config_locale_c):
+    with transacao(config_locale_c) as conexao:
+        conexao.execute("TRUNCATE livros RESTART IDENTITY CASCADE")
+        _inserir_livro_com_titulo(conexao, "INFORMAÇÃO E SOCIEDADE", "9780000000001")
+
+    assert _titulos_achados(config_locale_c, "informacao") == ["INFORMAÇÃO E SOCIEDADE"]
+    assert _titulos_achados(config_locale_c, "Ção") == ["INFORMAÇÃO E SOCIEDADE"]
+
+
+def test_desempate_por_id_com_titulos_identicos(config):
+    with transacao(config) as conexao:
+        conexao.execute("TRUNCATE livros RESTART IDENTITY CASCADE")
+        for numero in range(3):
+            _inserir_livro_com_titulo(conexao, "Mesmo", f"97800000001{numero:02d}")
+        consulta = sql.SQL("SELECT id FROM livros ORDER BY {}").format(ordem_alfabetica("titulo"))
+        ids = [linha["id"] for linha in conexao.execute(consulta)]
+
+    assert ids == sorted(ids)
+
+
+def test_ordem_alfabetica_aceita_coluna_qualificada_e_outro_desempate():
+    texto = ordem_alfabetica("u.nome", desempate="u.id").as_string(None)
+
+    assert texto == 'lower(unaccent("u"."nome")) COLLATE "C", "u"."nome" COLLATE "C", "u"."id"'

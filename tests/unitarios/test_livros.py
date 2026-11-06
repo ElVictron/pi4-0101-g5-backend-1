@@ -109,3 +109,48 @@ def test_rota_recusa_nul_antes_de_chegar_ao_banco(campo):
 
     assert resposta.status_code == 400
     assert resposta.json()["erro"]["codigo"] == "DADOS_INVALIDOS"
+
+
+def test_consulta_le_pagina_e_total_na_mesma_transacao_somente_leitura(monkeypatch):
+    from app.parametros import ConsultaPaginada
+
+    chamadas = []
+
+    @contextmanager
+    def transacao_falsa(config, *, somente_leitura=False):
+        chamadas.append(("abre", somente_leitura))
+        yield "conexao"
+        chamadas.append(("fecha",))
+
+    def buscar_falso(conexao, termo, *, limite, deslocamento):
+        chamadas.append(("buscar", conexao, termo, limite, deslocamento))
+        return ["livro"]
+
+    def contar_falso(conexao, termo):
+        chamadas.append(("contar", conexao, termo))
+        return 42
+
+    monkeypatch.setattr(servico, "transacao", transacao_falsa)
+    monkeypatch.setattr(servico.repositorio, "buscar", buscar_falso)
+    monkeypatch.setattr(servico.repositorio, "contar", contar_falso)
+
+    pagina = servico.consultar_livros(
+        Config(database_url="postgresql://x/y_teste"), ConsultaPaginada("dados", 3, 10)
+    )
+
+    assert pagina == servico.PaginaDeLivros(livros=["livro"], total=42)
+    assert chamadas == [
+        ("abre", True),
+        ("buscar", "conexao", "dados", 10, 20),
+        ("contar", "conexao", "dados"),
+        ("fecha",),
+    ]
+
+
+def test_ordem_da_consulta_usa_collation_deterministica():
+    from app.livros import repositorio
+
+    assert repositorio._ORDEM.as_string(None) == (
+        'ORDER BY lower(unaccent("titulo")) COLLATE "C", "titulo" COLLATE "C", "id"'
+    )
+    assert repositorio.COLUNAS_DA_BUSCA == ("titulo", "autor", "isbn")

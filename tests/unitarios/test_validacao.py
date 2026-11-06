@@ -24,7 +24,7 @@ def test_ausente_nulo_ou_em_branco_e_campos_obrigatorios(valor):
     assert _codigo(exigir_presentes, dados, ["a"]) is CodigoErro.CAMPOS_OBRIGATORIOS
 
 
-@pytest.mark.parametrize("valor", [0, False, [], {}, "x", " "], ids=repr)
+@pytest.mark.parametrize("valor", [0, False, [], {}, "x", "\u00a0"], ids=repr)
 def test_valores_presentes_passam_mesmo_com_tipo_errado(valor):
     exigir_presentes({"a": valor}, ["a"])
 
@@ -48,7 +48,7 @@ def test_texto_remove_so_os_brancos_das_pontas():
 
 
 def test_texto_nao_remove_espaco_inseparavel():
-    assert texto(" a ", "titulo", maximo=200) == " a "
+    assert texto("\u00a0a\u00a0", "titulo", maximo=200) == "\u00a0a\u00a0"
 
 
 @pytest.mark.parametrize("valor", [1, 1.5, True, ["a"], {"a": 1}, None], ids=repr)
@@ -118,9 +118,9 @@ def test_digitos_normaliza(valor, esperado):
         "9" * 11,
         "9" * 14,
         "-",
-        "١" * 10,  # dígitos arábico-índicos: str.isdigit() aceitaria
-        "²" * 10,  # sobrescrito
-        "９" * 13,  # dígito de largura total
+        "\u0661" * 10,  # dígitos arábico-índicos: str.isdigit() aceitaria
+        "\u00b2" * 10,  # sobrescrito
+        "\uff19" * 13,  # dígito de largura total
     ],
     ids=repr,
 )
