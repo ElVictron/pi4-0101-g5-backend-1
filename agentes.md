@@ -1,7 +1,7 @@
 # agentes.md — Plano de ação multi-agente (spec driven) do Backend 1
 
 Projeto Integrador IV (PI IV 0101 — Grupo 5). Repositório: `pi4-0101-g5-backend-1`.
-Status deste documento: **plano aprovado para revisão. Nenhuma implementação começa antes da ordem explícita do Victor.**
+Status deste documento: **plano aprovado (3 agentes + PM). Nenhuma implementação começa antes da ordem explícita do Victor.**
 
 ---
 
@@ -75,14 +75,17 @@ Se duas fontes divergirem, vale a de menor número, e o PM registra a divergênc
 - **Proibido** editar `tests/contrato/`. Se achar um teste errado, abre uma **disputa** para o PM (qual teste, qual trecho da especificação contradiz).
 - Implementa o mínimo para passar nos testes e cumprir o contrato; nada de funcionalidade fora da ficha.
 
-### 3.4 Sobre criar mais agentes (decisão do Victor pendente)
+### 3.4 Agente Revisor de Conformidade — **ativo** (decisão do Victor)
 
-O pedido foi "se achar necessário, me diga antes". Minha avaliação:
+- Somente leitura: não edita código nem testes; entrega um relatório ao PM.
+- Entrada: contratos, ADRs, decisões, briefing do entregável, `tests/contrato/`, `app/` e `tests/unitarios/`.
+- Confere, para o entregável: rota, campos, tipos, obrigatoriedade e **cada erro da ficha** contra o que o código faz; se existe teste de contrato para cada linha da tabela de erros; se há comportamento no código que nenhuma ficha pede; se o texto do card foi atendido.
+- Saída: lista de achados (`bloqueia` / `não bloqueia`) com o trecho da especificação e o arquivo/linha. Achado que bloqueia volta ao passo 4 do ciclo; o PM decide se é erro do código, do teste ou da especificação.
+- Roda **depois** da suíte verde e **antes** do commit.
 
-- **Mais de um agente de Backend em paralelo: não recomendo.** Todos os entregáveis mexem no mesmo esqueleto, na mesma branch e geram um commit cada; paralelizar causaria conflito de merge e commits misturados.
-- **Mais de um agente de Teste: não recomendo** pelo mesmo motivo.
-- **Um terceiro agente, o Revisor de Conformidade (somente leitura): recomendo como opcional.** Ele compara, ao fim de cada entregável, o contrato com a rota/validação/erro implementados e aponta o que os testes não cobriram. Custo: mais uma passada por entregável. Benefício: pega o caso em que o agente de teste e o de backend interpretaram a mesma ficha de forma errada, porque os dois recebem o mesmo briefing.
-  - **Padrão do plano: sem Revisor.** O PM faz a conferência de conformidade. Ativar o Revisor só se o Victor aprovar.
+### 3.5 Sobre mais agentes
+
+Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não haverá mais de um agente de Backend nem de Teste, para evitar conflito na mesma branch e commits misturados.
 
 ---
 
@@ -102,9 +105,9 @@ O pedido foi "se achar necessário, me diga antes". Minha avaliação:
 | D8 | Backend 2 é simulado nos testes; nada deste plano altera o repositório do Backend 2 ou do Frontend | Pedido do Victor |
 | D9 | PM orquestra; mínimo de 2 agentes (Teste e Backend) | Pedido do Victor |
 
-### 4.2 Propostas do PM (precisam de "ok" do Victor antes da E0)
+### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
-Lacunas reais da especificação. Sem fechá-las, o agente de teste teria que inventar números e formatos.
+Lacunas da especificação fechadas por esta tabela. Valem como decisões, e a E0 as leva para os contratos.
 
 | # | Lacuna | Proposta |
 |---|---|---|
@@ -136,9 +139,12 @@ Lacunas reais da especificação. Sem fechá-las, o agente de teste teria que in
  4. Agente de Backend Implementa app/ + tests/unitarios/
  5. PM        Roda: ruff + unitários + contrato + cobertura
               Confere: tests/contrato/ não mudou desde o congelamento
- 6. PM        Verde? Commit único do entregável + push da branch
-              Vermelho? volta ao passo 4 (máx. 3 voltas); disputa de teste
-              vai ao passo 3 com decisão registrada; sem solução → Victor
+ 6. Revisor   Relatório de conformidade (contrato × código × testes)
+ 7. PM        Verde e sem achado bloqueante? Commit único do entregável
+              + push da branch
+              Vermelho ou achado bloqueante? volta ao passo 4 (máx. 3
+              voltas); disputa de teste vai ao passo 3 com decisão
+              registrada; sem solução → Victor
 ```
 
 Regras do ciclo:
@@ -174,6 +180,7 @@ Regras do ciclo:
 - [ ] Testes unitários do agente de Backend passando.
 - [ ] Testes de contrato do agente de Teste passando, **sem alteração** desde o congelamento.
 - [ ] Suíte completa (entregáveis anteriores incluídos) verde.
+- [ ] Relatório do Revisor sem achado bloqueante.
 - [ ] `ruff check` e `ruff format --check` sem erros.
 - [ ] Cobertura de `app/` ≥ 85% no entregável (medido, não declarado).
 - [ ] Sem segredo no código; configuração por variável de ambiente.
@@ -278,11 +285,45 @@ docs/                contratos, ADRs (já existem)
 
 ---
 
+## 8A. Preparação para a integração com o Backend 2 (sem implementá-lo)
+
+**Quem fala o quê.** O WebSocket não passa pelo Backend 1.
+
+```
+Frontend ──HTTPS──► Backend 1 ──SQL──► PostgreSQL
+                       │
+                       └──HTTPS (CT12: POST /eventos/biblioteca)──► Backend 2 ──WSS (CT13)──► Frontend
+```
+
+- **Backend 1 → Backend 2:** requisição **HTTPS** comum, `POST /eventos/biblioteca` (CT12).
+- **Backend 2 → Frontend:** **WebSocket seguro (WSS)** com o evento `bibliotecaAtualizada` (CT13). Isso é do Backend 2 e fica fora deste plano.
+- Logo, o Backend 1 não abre, não aceita e não mantém conexão WebSocket. O que ele precisa deixar pronto é um **cliente HTTP fiel ao CT12**.
+
+**O que o Backend 1 deixa "no jeito" para a integração:**
+
+| Item | Como fica |
+|---|---|
+| Endereço do Backend 2 | Variável `BACKEND2_URL` (ex.: `https://backend2:8443`), sem valor fixo no código |
+| TLS | `BACKEND2_CA_BUNDLE` (certificado próprio do Compose) e `BACKEND2_VERIFY_TLS`; nunca desligar a verificação por padrão |
+| Timeout | `BACKEND2_TIMEOUT_SEGUNDOS` (padrão 3), para o empréstimo não ficar preso se o Backend 2 travar |
+| Payload | Exatamente os campos do CT12: `tipo` (`emprestimo_registrado` ou `devolucao_registrada`), `livroId`, `usuarioId`, `emprestimoId`, `status`, `quantidadeDisponivel`, `atualizadaEm` |
+| Resposta esperada | `{"aceito": true, "eventoId": "..."}`; qualquer outra coisa (erro HTTP, timeout, conexão recusada, `aceito` falso) conta como falha |
+| Falha | A operação do cliente **continua com sucesso**; o evento vai para `eventos_pendentes` (P10) e pode ser reenviado com `python -m app.reenviar_eventos` |
+| Fronteira isolada | Todo o código que fala com o Backend 2 fica em um único módulo (`app/eventos/`), atrás de uma interface (`PublicadorDeEventos`). Trocar o servidor falso pelo real não muda regra de negócio |
+| Teste de fidelidade ao CT12 | Os testes validam o payload enviado campo a campo contra o CT12 (tipos, obrigatoriedade, valores permitidos); se o CT12 mudar, o teste quebra |
+| Servidor falso | Nos testes, um servidor HTTP local responde como o CT12 (sucesso, `EVENTO_INVALIDO`, `EVENTO_NAO_PUBLICADO`, lento, fora do ar) |
+
+**Fica para depois (card #795, fora do plano):** subir Backend 1, Backend 2, Frontend e PostgreSQL juntos e conferir que um empréstimo numa aba muda a quantidade no painel de outra aba. A única mudança esperada no Backend 1 nessa hora é apontar `BACKEND2_URL` e o certificado para o contêiner real.
+
+**Ponto de atenção para o Victor:** o CT12 define o retorno do Backend 2 como `aceito` + `eventoId`, e `status` aceita `atrasado` no evento. Como `atrasado` não é gravado (D3) e os dois eventos do Backend 1 são de empréstimo e devolução, o Backend 1 só enviará `ativo` ou `devolvido`. Se o Backend 2 quiser tratar `atrasado`, é decisão do lado dele.
+
+---
+
 ## 9. Riscos e como o plano os trata
 
 | Risco | Tratamento |
 |---|---|
-| Os dois agentes leem a mesma ficha ambígua e erram juntos | Lacunas fechadas na E0; PM confere conformidade; Revisor opcional (3.4) |
+| Os dois agentes leem a mesma ficha ambígua e erram juntos | Lacunas fechadas na E0; PM confere conformidade; Revisor (3.4) |
 | Teste vermelho "por engano" (erro de fixture, não de comportamento) | Passo 3 do ciclo: PM exige falha pelo motivo certo |
 | Agente de backend "ajusta" o teste para passar | Hash congelado de `tests/contrato/`, conferido no passo 5 |
 | Cobertura alta com teste fraco | Casos obrigatórios listados por entregável; contrato testa efeito no banco, não só status HTTP |
@@ -299,9 +340,9 @@ docs/                contratos, ADRs (já existem)
 
 | Item | Situação |
 |---|---|
-| Plano | Escrito, aguardando revisão do Victor |
-| Decisões P1–P14 | Aguardando "ok" ou ajustes |
-| Revisor opcional (3.4) | Aguardando decisão |
+| Plano | Aprovado com 3 agentes; aguardando ordem de início |
+| Decisões P1–P14 | **Aprovadas** |
+| Revisor (3.4) | **Ativo** (aprovado) |
 | Branch `feat/backend-1-implementacao` | Criada só para guardar este plano; **nenhum código nela ainda** |
 | Implementação | **Não iniciada** |
 
