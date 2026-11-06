@@ -110,6 +110,10 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D12 | Sem documentação automática do FastAPI (`/docs`, `/redoc`, `/openapi.json` → 404); sem redirecionamento de barra final (→ 404); corpo exige `Content-Type: application/json`, UTF-8 e no máximo 64 KiB (senão `DADOS_INVALIDOS`); `*` em `CORS_ORIGENS` é recusado; valores de configuração inválidos → `ValueError` | Revisor, E1 |
 | D13 | Rotas com corpo ou parâmetros **não** usam a validação automática do Pydantic/FastAPI: lêem o corpo por `app.entrada.corpo_json` e os parâmetros como texto, e validam na ordem do §4/§6 das convenções (evita `true` virar inteiro e códigos errados) | Revisor, E1 |
 | D14 | O TLS do servidor (`SSL_CERTFILE`/`SSL_KEYFILE`) é ligado no comando de início do contêiner (E12), não no `Config` | Revisor, E1 |
+| D15 | Restrições extras do banco (coerência `status`/`devolvido_em`, `quantidade_disponivel <= quantidade_exemplares`, datas coerentes, extensão `unaccent`) em `00-convencoes.md` §11 | PM, E2 |
+| D16 | Regras de implementação para E4+: (a) duplicidade de ISBN/CPF mapeada pela `UniqueViolation` com o nome da restrição (`livros_isbn_unico`, `usuarios_cpf_unico`), não só por SELECT prévio; (b) existência de usuário/livro verificada antes do INSERT, FK como rede de segurança; (c) baixa de estoque pelo UPDATE condicional (P11); (d) qualquer outra violação → `ERRO_INTERNO`, sem copiar texto do banco para a mensagem nem para o log; (e) rotas que usam banco declaradas com `def` (não `async def`), para não bloquear o loop; (f) datas gravadas sempre vindas do `Relogio`, nunca do padrão do banco; (g) serviço não chama `commit`/`rollback` dentro de `transacao` | Revisor, E2 |
+| D17 | Testes de contrato semeiam dados sem `id` explícito (usar `RETURNING id`) | Revisor, E2 |
+| D18 | O schema é reaplicável (`IF NOT EXISTS`), mas não migra tabela existente: mudança de schema exige recriar o banco (documentar no README do E13; Compose do E12 aplica só em volume novo) | Revisor, E2 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
