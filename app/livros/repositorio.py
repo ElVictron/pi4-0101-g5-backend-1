@@ -18,10 +18,17 @@ COLUNAS_DA_BUSCA = ("titulo", "autor", "isbn")
 _ORDEM = sql.SQL("ORDER BY {}").format(ordem_alfabetica("titulo"))
 
 
-def _onde(termo: str | None) -> sql.Composable:
-    if termo is None:
+_SO_DISPONIVEIS = sql.SQL("quantidade_disponivel > 0")
+
+
+def _onde(termo: str | None, *condicoes: sql.Composable) -> sql.Composable:
+    """`WHERE` com as `condicoes` e, se houver termo, o filtro de busca (tudo com AND)."""
+    partes = list(condicoes)
+    if termo is not None:
+        partes.append(sql.SQL("({})").format(filtro_de_busca(COLUNAS_DA_BUSCA)))
+    if not partes:
         return sql.SQL("")
-    return sql.SQL("WHERE {}").format(filtro_de_busca(COLUNAS_DA_BUSCA))
+    return sql.SQL("WHERE {}").format(sql.SQL(" AND ").join(partes))
 
 
 def inserir(conexao: Conexao, novo: NovoLivro, criado_em: datetime) -> Livro:
@@ -63,3 +70,11 @@ def contar(conexao: Conexao, termo: str | None) -> int:
     ).fetchone()
     assert linha is not None
     return linha["total"]
+
+
+def listar_disponiveis(conexao: Conexao, termo: str | None) -> list[Livro]:
+    """CT7: livros com exemplar livre (`quantidade_disponivel > 0`), na ordem do §6."""
+    consulta = sql.SQL("SELECT {} FROM livros {} {}").format(
+        _COLUNAS, _onde(termo, _SO_DISPONIVEIS), _ORDEM
+    )
+    return [Livro(**linha) for linha in conexao.execute(consulta, {"termo": termo}).fetchall()]

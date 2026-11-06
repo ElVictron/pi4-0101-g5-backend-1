@@ -1,4 +1,4 @@
-"""Rotas HTTP de livros (CT1, CT2).
+"""Rotas HTTP de livros (CT1, CT2, CT7).
 
 Rotas com banco são `def` (D16 e): o FastAPI as roda fora do loop de eventos.
 """
@@ -11,8 +11,17 @@ from fastapi import APIRouter, Request
 
 from app.dependencias import ConfigDaApp, CorpoJson, RelogioDaApp
 from app.livros import servico
-from app.livros.esquemas import ler_novo_livro, livro_para_json
-from app.parametros import PARAMETROS_PAGINADOS, ler_consulta_paginada, primeiros_valores
+from app.livros.esquemas import (
+    ler_novo_livro,
+    livro_disponibilidade_para_json,
+    livro_para_json,
+)
+from app.parametros import (
+    PARAMETROS_PAGINADOS,
+    ler_busca,
+    ler_consulta_paginada,
+    primeiros_valores,
+)
 
 roteador = APIRouter()
 
@@ -37,3 +46,11 @@ def consultar_livros(request: Request, config: ConfigDaApp) -> dict[str, Any]:
         "pagina": consulta.pagina,
         "tamanho": consulta.tamanho,
     }
+
+
+@roteador.get("/livros/disponibilidade", response_model=None)
+def listar_disponibilidade(request: Request, config: ConfigDaApp) -> dict[str, Any]:
+    """CT7 · listarDisponibilidade. Só `busca`; sem paginação (`pagina`/`tamanho` ignorados)."""
+    busca = ler_busca(primeiros_valores(request.scope["query_string"], ("busca",)).get("busca"))
+    livros = servico.listar_disponibilidade(config, busca)
+    return {"livros": [livro_disponibilidade_para_json(livro) for livro in livros]}

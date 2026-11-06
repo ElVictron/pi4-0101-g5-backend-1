@@ -154,3 +154,102 @@ def test_ordem_da_consulta_usa_collation_deterministica():
         'ORDER BY lower(unaccent("titulo")) COLLATE "C", "titulo" COLLATE "C", "id"'
     )
     assert repositorio.COLUNAS_DA_BUSCA == ("titulo", "autor", "isbn")
+
+
+# ----------------------------------------------- CT7 listarDisponibilidade (sem banco)
+
+
+def test_saida_livro_disponibilidade_tem_so_os_campos_do_ct7():
+    from app.livros.esquemas import livro_disponibilidade_para_json
+
+    livro = Livro(1, "T", "A", "9780000000001", 3, 2, INSTANTE)
+
+    assert livro_disponibilidade_para_json(livro) == {
+        "id": 1,
+        "titulo": "T",
+        "quantidadeExemplares": 3,
+        "quantidadeDisponivel": 2,
+        "disponivel": True,
+    }
+
+
+def test_where_da_disponibilidade_combina_estoque_e_busca_com_and():
+    from app.livros import repositorio
+
+    sem_busca = repositorio._onde(None, repositorio._SO_DISPONIVEIS).as_string(None)
+    com_busca = repositorio._onde("x", repositorio._SO_DISPONIVEIS).as_string(None)
+
+    assert sem_busca == "WHERE quantidade_disponivel > 0"
+    assert com_busca.startswith("WHERE quantidade_disponivel > 0 AND (")
+    assert com_busca.count("LIKE") == 3
+    assert repositorio._onde(None).as_string(None) == ""
+
+
+def test_servico_de_disponibilidade_usa_transacao_somente_leitura(monkeypatch):
+    chamadas = []
+
+    @contextmanager
+    def transacao_falsa(config, *, somente_leitura=False):
+        chamadas.append(("abre", somente_leitura))
+        yield "conexao"
+
+    def listar_falso(conexao, termo):
+        chamadas.append(("listar", conexao, termo))
+        return ["livro"]
+
+    monkeypatch.setattr(servico, "transacao", transacao_falsa)
+    monkeypatch.setattr(servico.repositorio, "listar_disponiveis", listar_falso)
+
+    resultado = servico.listar_disponibilidade(Config(database_url="postgresql://x/y_teste"), "a")
+
+    assert resultado == ["livro"]
+    assert chamadas == [("abre", True), ("listar", "conexao", "a")]
+
+
+@pytest.fixture
+def cliente_disponibilidade(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    recebidos = []
+
+    def listar_falso(config, busca):
+        recebidos.append(busca)
+        return [Livro(5, "Livro", "Autor", "9780000000001", 2, 1, INSTANTE)]
+
+    monkeypatch.setattr(servico, "listar_disponibilidade", listar_falso)
+    app = create_app(config=Config(database_url="postgresql://x/y_teste"))
+    with TestClient(app) as cliente:
+        yield cliente, recebidos
+
+
+def test_rota_de_disponibilidade_le_so_a_busca_e_ignora_paginacao(cliente_disponibilidade):
+    cliente, recebidos = cliente_disponibilidade
+
+    resposta = cliente.get("/livros/disponibilidade?pagina=0&tamanho=abc&busca=+a+&busca=b")
+
+    assert resposta.status_code == 200
+    assert resposta.json() == {
+        "livros": [
+            {
+                "id": 5,
+                "titulo": "Livro",
+                "quantidadeExemplares": 2,
+                "quantidadeDisponivel": 1,
+                "disponivel": True,
+            }
+        ]
+    }
+    assert recebidos == ["a"]
+
+
+@pytest.mark.parametrize("consulta", ["busca=" + "a" * 101, "busca=%00", "busca=%FF"])
+def test_rota_de_disponibilidade_com_busca_invalida(cliente_disponibilidade, consulta):
+    cliente, recebidos = cliente_disponibilidade
+
+    resposta = cliente.get(f"/livros/disponibilidade?{consulta}")
+
+    assert resposta.status_code == 400
+    assert resposta.json()["erro"]["codigo"] == "BUSCA_INVALIDA"
+    assert recebidos == []

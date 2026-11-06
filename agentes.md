@@ -160,7 +160,8 @@ Lacunas da especificação fechadas por esta tabela. Valem como decisões, e a E
 
 Regras do ciclo:
 
-- Tudo roda **em sequência**, um entregável por vez (sem paralelismo entre agentes).
+- Por padrão, tudo roda **em sequência**, um entregável por vez. **Variante paralela** (usada a partir do E7, quando a especificação já está fechada): Teste e Backend trabalham ao mesmo tempo, cada um no seu banco; como a fase vermelha se perde, o agente de Teste prova que os testes discriminam rodando-os contra uma referência isolada e contra versões com defeitos plantados (cada defeito tem de derrubar ao menos um teste).
+- Cada agente usa o seu banco de teste (`biblioteca_agenteteste_teste`, `biblioteca_backend_teste`, `biblioteca_revisor_teste`); o PM usa `biblioteca_teste`.
 - O agente de teste não vê `app/`; o de backend não altera `tests/contrato/`.
 - Toda decisão nova tomada num ciclo é anexada à seção 4 e entra no commit do entregável.
 - O PM anota no commit qual card e quais contratos o entregável atende.

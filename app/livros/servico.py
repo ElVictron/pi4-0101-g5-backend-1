@@ -1,4 +1,4 @@
-"""Regras de negócio de livros (CT1, CT2)."""
+"""Regras de negócio de livros (CT1, CT2, CT7)."""
 
 from __future__ import annotations
 
@@ -38,3 +38,9 @@ def consultar_livros(config: Config, consulta: ConsultaPaginada) -> PaginaDeLivr
             ),
             total=repositorio.contar(conexao, consulta.busca),
         )
+
+
+def listar_disponibilidade(config: Config, busca: str | None) -> list[Livro]:
+    """Livros com exemplar disponível, sem paginação (CT7)."""
+    with transacao(config, somente_leitura=True) as conexao:
+        return repositorio.listar_disponiveis(conexao, busca)

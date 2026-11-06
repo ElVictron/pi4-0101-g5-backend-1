@@ -1,4 +1,4 @@
-"""Entrada e saída da API de livros (CT1; 00-convencoes §4 e §5)."""
+"""Entrada e saída da API de livros (CT1, CT2, CT7; 00-convencoes §4 e §5)."""
 
 from __future__ import annotations
 
@@ -64,4 +64,15 @@ def livro_para_json(livro: Livro) -> dict[str, Any]:
         "isbn": livro.isbn,
         "quantidadeExemplares": livro.quantidade_exemplares,
         "quantidadeDisponivel": livro.quantidade_disponivel,
+    }
+
+
+def livro_disponibilidade_para_json(livro: Livro) -> dict[str, Any]:
+    """Objeto LivroDisponibilidade do CT7 (sem autor nem ISBN)."""
+    return {
+        "id": livro.id,
+        "titulo": livro.titulo,
+        "quantidadeExemplares": livro.quantidade_exemplares,
+        "quantidadeDisponivel": livro.quantidade_disponivel,
+        "disponivel": livro.quantidade_disponivel > 0,
     }
