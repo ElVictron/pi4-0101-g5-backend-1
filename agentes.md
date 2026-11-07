@@ -117,6 +117,7 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D19 | CI (E3): GitHub Actions em todo push e PR para `main`, Python 3.12 e 3.13, PostgreSQL 16 como serviço, ruff + pytest com cobertura mínima de 85%; `ruff` com versão exata no `pyproject.toml`. A prova de falha foi feita localmente (código de saída ≠ 0); a primeira execução no GitHub foi verde | Revisor, E3 |
 | D20 | Cliente do Backend 2 com `trust_env=False` (não herda proxy, `SSL_CERT_*` nem `.netrc` do ambiente); com `BACKEND2_CA_BUNDLE`, a verificação TLS fica sempre ligada; `ultimo_erro` com no máximo 200 caracteres e sem o payload; no reenvio, evento pulado por estar travado por outro reenvio conta como pendente (código 1) | Revisor, E9 |
 | D21 | Entrega ao Backend 2 é "pelo menos uma vez" e sem ordem garantida: o Backend 2 deve tolerar duplicatas (`tipo` + `emprestimoId`) e eventos fora de ordem (card #795, fora deste plano) | Revisor, E9 |
+| D22 | Contêiner (E12): imagem `python:3.12-slim`, usuário sem privilégios, porta 8000 (alterável por `PORTA`, que o healthcheck acompanha), `HEALTHCHECK` com `GET /saude`; início por `scripts/iniciar.sh`: com `SSL_CERTFILE` **e** `SSL_KEYFILE` → Uvicorn com TLS; sem nenhum → HTTP; só um dos dois → sai com código 1 e mensagem. Compose com `postgres:16` (volume persistente, `db/schema.sql` em `docker-entrypoint-initdb.d`, healthcheck) e `backend1` dependendo do banco saudável; Backend 2 e Frontend só como comentário | PM, E12 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
@@ -372,11 +373,12 @@ Os agentes de Teste e de Backend não se veem; este é o único "contrato intern
 
 | Item | Situação |
 |---|---|
-| Plano | Aprovado com 3 agentes; implementação iniciada em 06/11/2026 |
+| Plano | Executado: E0 a E13 entregues |
+| Pendente fora do plano | Card #795 (integração com Backend 2 e Frontend), #782 (Backend 2), #802 (roteiro), D21 no Backend 2, validação com Docker real (lista no commit da E12), atualizar o card #781 no OpenProject (status sem `atrasado`) |
 | Decisões P1–P14 | **Aprovadas** |
 | Revisor (3.4) | **Ativo** (aprovado) |
 | Branch `feat/backend-1-implementacao` | Em uso |
-| Implementação | Em andamento; progresso por entregável no histórico de commits da branch |
+| Implementação | E0 a E13 concluídas e aprovadas pelo Revisor (um commit por entregável na branch) |
 | CI no GitHub | Verde na primeira execução (commit `89c8512`, Python 3.12 e 3.13), conferido pelo PM pela API pública do GitHub |
 
 Quando o Victor liberar: começar pela E0 nesta mesma branch e seguir a ordem da seção 7.
