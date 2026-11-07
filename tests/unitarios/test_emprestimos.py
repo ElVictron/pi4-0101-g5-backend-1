@@ -10,14 +10,17 @@ from app.emprestimos import repositorio, servico
 from app.emprestimos.esquemas import (
     CAMPOS_ENTRADA,
     PRAZO_DE_DEVOLUCAO,
+    Devolucao,
     Emprestimo,
     EmprestimoResumo,
     NovoEmprestimo,
     Situacao,
     data_hora_para_json,
     data_limite_para,
+    devolucao_para_json,
     emprestimo_para_json,
     emprestimo_resumo_para_json,
+    ler_id_do_caminho,
     ler_novo_emprestimo,
     situacao_efetiva,
 )
@@ -459,3 +462,189 @@ def test_rota_de_consulta_valida_status_antes_de_busca(cliente_consulta, consult
     assert resposta.status_code == 400
     assert resposta.json()["erro"]["codigo"] == codigo
     assert recebidos == []
+
+
+# ----------------------------------------------- CT6 registrarDevolucao (sem banco)
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("1", 1),
+        ("9001", 9001),
+        ("007", 7),
+        ("0" * 30 + "5", 5),
+        (str(INTEIRO_MAXIMO), INTEIRO_MAXIMO),
+        ("0", None),
+        ("000", None),
+        (str(INTEIRO_MAXIMO + 1), None),
+        ("9" * 5000, None),
+        ("-1", None),
+        ("+1", None),
+        (" 1", None),
+        ("1 ", None),
+        ("1.0", None),
+        ("1e3", None),
+        ("0x1", None),
+        ("abc", None),
+        ("", None),
+        ("1\x00", None),
+        ("\x00", None),
+        ("\uff11", None),
+        ("\u0661", None),
+        ("\ufffd", None),
+    ],
+    ids=repr,
+)
+def test_id_do_caminho(texto, esperado):
+    assert ler_id_do_caminho(texto) == esperado
+
+
+def test_saida_do_ct6():
+    devolucao = Devolucao(9, 7, 5, datetime(2026, 10, 15, 16, 30), 3)
+
+    assert devolucao_para_json(devolucao) == {
+        "emprestimoId": 9,
+        "livroId": 7,
+        "status": "devolvido",
+        "devolvidoEm": "2026-10-15T16:30:00",
+        "quantidadeDisponivel": 3,
+    }
+
+
+@pytest.fixture
+def devolucao(monkeypatch):
+    """Dublês: `estado["linha"]` é o que o UPDATE devolve; `estado["existe"]`, o SELECT."""
+    estado = {
+        "linha": {"livro_id": 7, "usuario_id": 5, "devolvido_em": T0},
+        "existe": True,
+        "ops": [],
+    }
+
+    @contextmanager
+    def transacao_falsa(config, *, somente_leitura=False):
+        estado["ops"].append("abre")
+        try:
+            yield "conexao"
+        except BaseException:
+            estado["ops"].append("desfaz")
+            raise
+        estado["ops"].append("confirma")
+
+    def marcar(conexao, emprestimo_id, agora):
+        estado["ops"].append(("marcar", emprestimo_id, agora))
+        return estado["linha"]
+
+    def existe(conexao, emprestimo_id):
+        estado["ops"].append(("existe", emprestimo_id))
+        return estado["existe"]
+
+    def devolver_exemplar(conexao, livro_id):
+        estado["ops"].append(("repor", livro_id))
+        return 3
+
+    def publicar(config, relogio, publicador, payload):
+        estado["ops"].append(("publicar", dict(payload)))
+        return True
+
+    monkeypatch.setattr(servico, "transacao", transacao_falsa)
+    monkeypatch.setattr(servico.repositorio, "marcar_devolvido", marcar)
+    monkeypatch.setattr(servico.repositorio, "existe", existe)
+    monkeypatch.setattr(servico.repositorio_livros, "devolver_exemplar", devolver_exemplar)
+    monkeypatch.setattr(servico, "publicar_ou_guardar", publicar)
+    return estado
+
+
+def _devolver(emprestimo_id):
+    return servico.registrar_devolucao(
+        Config(database_url="postgresql://x/y_teste"), RelogioFixo(T0), object(), emprestimo_id
+    )
+
+
+def test_devolve_repoe_e_publica_depois_do_commit(devolucao):
+    resultado = _devolver(9)
+
+    assert resultado == Devolucao(9, 7, 5, T0, 3)
+    assert devolucao["ops"] == [
+        "abre",
+        ("marcar", 9, T0),
+        ("repor", 7),
+        "confirma",
+        (
+            "publicar",
+            {
+                "tipo": "devolucao_registrada",
+                "livroId": 7,
+                "usuarioId": 5,
+                "emprestimoId": 9,
+                "status": "devolvido",
+                "quantidadeDisponivel": 3,
+                "atualizadaEm": "2026-10-13T19:20:00",
+            },
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("existe", "codigo"),
+    [(False, CodigoErro.EMPRESTIMO_NAO_ENCONTRADO), (True, CodigoErro.EMPRESTIMO_JA_DEVOLVIDO)],
+)
+def test_sem_linha_no_update_distingue_inexistente_de_ja_devolvido(devolucao, existe, codigo):
+    devolucao.update(linha=None, existe=existe)
+
+    with pytest.raises(ErroDominio) as erro:
+        _devolver(9)
+
+    assert erro.value.codigo is codigo
+    assert devolucao["ops"] == ["abre", ("marcar", 9, T0), ("existe", 9), "desfaz"]
+
+
+def test_id_invalido_nem_abre_transacao(devolucao):
+    with pytest.raises(ErroDominio) as erro:
+        _devolver(None)
+
+    assert erro.value.codigo is CodigoErro.EMPRESTIMO_NAO_ENCONTRADO
+    assert devolucao["ops"] == []
+
+
+@pytest.fixture
+def cliente_devolucao(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    recebidos = []
+
+    def registrar(config, relogio, publicador, emprestimo_id):
+        recebidos.append(emprestimo_id)
+        if emprestimo_id is None:
+            raise ErroDominio(CodigoErro.EMPRESTIMO_NAO_ENCONTRADO)
+        return Devolucao(emprestimo_id, 7, 5, T0, 3)
+
+    monkeypatch.setattr(servico, "registrar_devolucao", registrar)
+    app = create_app(config=Config(database_url="postgresql://x/y_teste"))
+    with TestClient(app) as cliente:
+        yield cliente, recebidos
+
+
+def test_rota_ignora_o_corpo_e_le_o_id_como_texto(cliente_devolucao):
+    cliente, recebidos = cliente_devolucao
+
+    resposta = cliente.patch(
+        "/emprestimos/007/devolucao", content=b"\xff lixo", headers={"Content-Type": "text/plain"}
+    )
+
+    assert resposta.status_code == 200
+    assert resposta.json()["emprestimoId"] == 7
+    assert recebidos == [7]
+
+
+@pytest.mark.parametrize("caminho", ["%00", "1%00", "%FF", "abc", "0", "-1", "%EF%BC%91"])
+def test_rota_com_id_invalido_e_emprestimo_nao_encontrado(cliente_devolucao, caminho):
+    cliente, recebidos = cliente_devolucao
+
+    resposta = cliente.patch(f"/emprestimos/{caminho}/devolucao")
+
+    assert resposta.status_code == 404
+    assert resposta.json()["erro"]["codigo"] == "EMPRESTIMO_NAO_ENCONTRADO"
+    assert recebidos == [None]

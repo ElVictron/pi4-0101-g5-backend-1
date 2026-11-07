@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -15,6 +16,10 @@ PRAZO_DE_DEVOLUCAO = timedelta(days=15)
 
 # Ordem da tabela de Entrada do CT5 (§4).
 CAMPOS_ENTRADA = ("usuarioId", "livroId")
+
+# CT6 · Detalhes: `emprestimoId` do caminho só em `[0-9]+` ASCII, de 1 a 2147483647.
+_ID_DO_CAMINHO = re.compile(r"[0-9]+")
+_DIGITOS_DO_MAXIMO = len(str(validacao.INTEIRO_MAXIMO))
 
 
 class Situacao(StrEnum):
@@ -63,6 +68,28 @@ def ler_novo_emprestimo(dados: Mapping[str, Any]) -> NovoEmprestimo:
         usuario_id=validacao.inteiro(dados["usuarioId"], "usuarioId", minimo=1),
         livro_id=validacao.inteiro(dados["livroId"], "livroId", minimo=1),
     )
+
+
+def ler_id_do_caminho(texto: str) -> int | None:
+    """Id do caminho (CT6); `None` se não for inteiro válido (vale como inexistente).
+
+    Sem cortar brancos nem aceitar sinal; zeros à esquerda não contam no tamanho.
+    """
+    if not _ID_DO_CAMINHO.fullmatch(texto) or len(texto.lstrip("0")) > _DIGITOS_DO_MAXIMO:
+        return None
+    valor = int(texto)
+    return valor if 1 <= valor <= validacao.INTEIRO_MAXIMO else None
+
+
+@dataclass(frozen=True)
+class Devolucao:
+    """Resultado do CT6."""
+
+    emprestimo_id: int
+    livro_id: int
+    usuario_id: int
+    devolvido_em: datetime
+    quantidade_disponivel: int
 
 
 def data_limite_para(emprestado_em: datetime) -> datetime:
@@ -114,4 +141,15 @@ def emprestimo_para_json(emprestimo: Emprestimo) -> dict[str, Any]:
         "emprestadoEm": data_hora_para_json(emprestimo.emprestado_em),
         "dataLimiteDevolucao": data_hora_para_json(emprestimo.data_limite_devolucao),
         "devolvidoEm": data_hora_para_json(emprestimo.devolvido_em),
+    }
+
+
+def devolucao_para_json(devolucao: Devolucao) -> dict[str, Any]:
+    """Saída do CT6."""
+    return {
+        "emprestimoId": devolucao.emprestimo_id,
+        "livroId": devolucao.livro_id,
+        "status": Situacao.DEVOLVIDO.value,
+        "devolvidoEm": data_hora_para_json(devolucao.devolvido_em),
+        "quantidadeDisponivel": devolucao.quantidade_disponivel,
     }

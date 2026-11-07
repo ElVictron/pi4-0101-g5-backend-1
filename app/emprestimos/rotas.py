@@ -1,4 +1,4 @@
-"""Rotas HTTP de empréstimos (CT5, CT8). Rotas com banco são `def` (D16 e)."""
+"""Rotas HTTP de empréstimos (CT5, CT6, CT8). Rotas com banco são `def` (D16 e)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ from app.dependencias import ConfigDaApp, CorpoJson, PublicadorDaApp, RelogioDaA
 from app.emprestimos import servico
 from app.emprestimos.esquemas import (
     Situacao,
+    devolucao_para_json,
     emprestimo_para_json,
     emprestimo_resumo_para_json,
+    ler_id_do_caminho,
     ler_novo_emprestimo,
 )
 from app.erros import CodigoErro
@@ -54,3 +56,14 @@ def consultar_emprestimos(
         ],
         "total": len(resultado.emprestimos),
     }
+
+
+@roteador.patch("/emprestimos/{emprestimo_id}/devolucao", response_model=None)
+def registrar_devolucao(
+    emprestimo_id: str, config: ConfigDaApp, relogio: RelogioDaApp, publicador: PublicadorDaApp
+) -> dict[str, Any]:
+    """CT6 · registrarDevolucao. Id do caminho lido como texto; corpo ignorado."""
+    devolucao = servico.registrar_devolucao(
+        config, relogio, publicador, ler_id_do_caminho(emprestimo_id)
+    )
+    return devolucao_para_json(devolucao)

@@ -27,6 +27,7 @@
 
 - `emprestimoId` vem só do caminho. A rota não exige corpo; se vier corpo (de qualquer tipo), ele é ignorado.
 - `emprestimoId` que não é inteiro ≥ 1 no formato `[0-9]+` (dígitos ASCII, até 2147483647) é tratado como empréstimo inexistente → `EMPRESTIMO_NAO_ENCONTRADO`.
+- Caminho com o id vazio (`/emprestimos//devolucao`) ou com barra codificada (`%2F`) não corresponde à rota: `404` `ROTA_NAO_ENCONTRADA`.
 - Ordem: empréstimo inexistente → `EMPRESTIMO_NAO_ENCONTRADO`; já devolvido → `EMPRESTIMO_JA_DEVOLVIDO`.
 - `devolvidoEm` = agora do relógio da aplicação; a quantidade disponível do livro sobe exatamente 1, e `quantidadeDisponivel` na resposta é o valor depois dessa alta.
 - Duas devoluções simultâneas do mesmo empréstimo: exatamente uma tem sucesso; a outra recebe `EMPRESTIMO_JA_DEVOLVIDO`, e a quantidade sobe uma vez só.

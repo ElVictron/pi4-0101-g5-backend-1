@@ -1,4 +1,4 @@
-"""Regras de negócio de empréstimos (CT5, CT8)."""
+"""Regras de negócio de empréstimos (CT5, CT6, CT8)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from app.config import Config
 from app.db import transacao, violacoes_como_erro
 from app.emprestimos import repositorio
 from app.emprestimos.esquemas import (
+    Devolucao,
     Emprestimo,
     EmprestimoResumo,
     NovoEmprestimo,
@@ -18,7 +19,12 @@ from app.emprestimos.esquemas import (
     situacao_efetiva,
 )
 from app.erros import CodigoErro, ErroDominio
-from app.eventos.publicador import EMPRESTIMO_REGISTRADO, PublicadorDeEventos, montar_payload
+from app.eventos.publicador import (
+    DEVOLUCAO_REGISTRADA,
+    EMPRESTIMO_REGISTRADO,
+    PublicadorDeEventos,
+    montar_payload,
+)
 from app.eventos.servico import publicar_ou_guardar
 from app.livros import repositorio as repositorio_livros
 from app.relogio import Relogio
@@ -105,3 +111,50 @@ def consultar_emprestimos(
             if situacao_efetiva(e.devolvido_em, e.data_limite_devolucao, agora) is status
         ]
     return EmprestimosConsultados(emprestimos=encontrados, agora=agora)
+
+
+def registrar_devolucao(
+    config: Config,
+    relogio: Relogio,
+    publicador: PublicadorDeEventos,
+    emprestimo_id: int | None,
+) -> Devolucao:
+    """CT6: devolve empréstimo `ativo` (ou atrasado) e repõe o exemplar; depois publica.
+
+    `emprestimo_id` `None` (id inválido no caminho) vale como inexistente.
+    Ordem dos erros: inexistente → `EMPRESTIMO_NAO_ENCONTRADO`; já devolvido →
+    `EMPRESTIMO_JA_DEVOLVIDO`. Erros não publicam nada.
+    """
+    if emprestimo_id is None:
+        raise ErroDominio(CodigoErro.EMPRESTIMO_NAO_ENCONTRADO)
+    devolvido_em = relogio.agora()
+    with transacao(config) as conexao:
+        linha = repositorio.marcar_devolvido(conexao, emprestimo_id, devolvido_em)
+        if linha is None:
+            if not repositorio.existe(conexao, emprestimo_id):
+                raise ErroDominio(CodigoErro.EMPRESTIMO_NAO_ENCONTRADO)
+            raise ErroDominio(CodigoErro.EMPRESTIMO_JA_DEVOLVIDO)
+        devolucao = Devolucao(
+            emprestimo_id=emprestimo_id,
+            livro_id=linha["livro_id"],
+            usuario_id=linha["usuario_id"],
+            devolvido_em=linha["devolvido_em"],
+            quantidade_disponivel=repositorio_livros.devolver_exemplar(conexao, linha["livro_id"]),
+        )
+
+    # Só depois do commit (§8), com a mesma regra de falha do CT5.
+    publicar_ou_guardar(
+        config,
+        relogio,
+        publicador,
+        montar_payload(
+            tipo=DEVOLUCAO_REGISTRADA,
+            livro_id=devolucao.livro_id,
+            usuario_id=devolucao.usuario_id,
+            emprestimo_id=devolucao.emprestimo_id,
+            status=Situacao.DEVOLVIDO.value,
+            quantidade_disponivel=devolucao.quantidade_disponivel,
+            atualizada_em=devolucao.devolvido_em,
+        ),
+    )
+    return devolucao

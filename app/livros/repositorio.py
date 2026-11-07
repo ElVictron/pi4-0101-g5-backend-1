@@ -97,3 +97,14 @@ def baixar_exemplar(conexao: Conexao, livro_id: int) -> int | None:
         (livro_id,),
     ).fetchone()
     return None if linha is None else linha["quantidade_disponivel"]
+
+
+def devolver_exemplar(conexao: Conexao, livro_id: int) -> int:
+    """Devolve um exemplar ao estoque (CT6) e retorna a quantidade disponível depois."""
+    linha = conexao.execute(
+        "UPDATE livros SET quantidade_disponivel = quantidade_disponivel + 1"
+        " WHERE id = %s RETURNING quantidade_disponivel",
+        (livro_id,),
+    ).fetchone()
+    assert linha is not None  # a chave estrangeira impede excluir livro com empréstimo
+    return linha["quantidade_disponivel"]

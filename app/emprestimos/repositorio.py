@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import Any
 
 from psycopg import sql
 
@@ -66,3 +67,31 @@ def inserir(
     ).fetchone()
     assert linha is not None
     return Emprestimo(**linha)
+
+
+def marcar_devolvido(
+    conexao: Conexao, emprestimo_id: int, devolvido_em: datetime
+) -> dict[str, Any] | None:
+    """Grava a devolução só se o empréstimo ainda está `ativo` (D3: `atrasado` é `ativo`).
+
+    Devolve `livro_id`, `usuario_id` e `devolvido_em`; `None` se não havia o que devolver.
+    Numa devolução simultânea, a segunda transação espera a trava e não acha mais `ativo`.
+    """
+    return conexao.execute(
+        "UPDATE emprestimos SET status = %(devolvido)s, devolvido_em = %(agora)s"
+        " WHERE id = %(id)s AND status = %(ativo)s"
+        " RETURNING livro_id, usuario_id, devolvido_em",
+        {
+            "devolvido": Situacao.DEVOLVIDO.value,
+            "ativo": Situacao.ATIVO.value,
+            "agora": devolvido_em,
+            "id": emprestimo_id,
+        },
+    ).fetchone()
+
+
+def existe(conexao: Conexao, emprestimo_id: int) -> bool:
+    linha = conexao.execute(
+        "SELECT 1 AS ok FROM emprestimos WHERE id = %s", (emprestimo_id,)
+    ).fetchone()
+    return linha is not None

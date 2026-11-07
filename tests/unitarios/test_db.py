@@ -523,3 +523,39 @@ def test_ultimo_erro_gravado_no_maximo_com_200_caracteres(limpo):
         ).fetchone()["ultimo_erro"]
 
     assert (gravado, atualizado) == ("a" * 200, "b" * 200)
+
+
+def test_devolucao_so_marca_ativo_e_repoe_um_exemplar(limpo):
+    from datetime import datetime, timedelta
+
+    from app.emprestimos import repositorio as emprestimos
+    from app.livros import repositorio as livros
+
+    t0 = datetime(2026, 10, 13, 19, 20)
+    with transacao(limpo) as conexao:
+        usuario = conexao.execute(
+            "INSERT INTO usuarios (nome, cpf, contato) VALUES ('N', '12345678900', 'a@b.co')"
+            " RETURNING id"
+        ).fetchone()["id"]
+        livro = conexao.execute(
+            "INSERT INTO livros (titulo, autor, isbn, quantidade_exemplares, quantidade_disponivel)"
+            " VALUES ('T', 'A', '9780000000001', 2, 1) RETURNING id"
+        ).fetchone()["id"]
+        emprestimo = emprestimos.inserir(
+            conexao,
+            usuario_id=usuario,
+            livro_id=livro,
+            emprestado_em=t0,
+            data_limite_devolucao=t0 + timedelta(days=15),
+        ).id
+        devolvido_em = t0 + timedelta(days=20)  # atrasado: gravado como ativo (D3)
+
+        assert emprestimos.marcar_devolvido(conexao, emprestimo, devolvido_em) == {
+            "livro_id": livro,
+            "usuario_id": usuario,
+            "devolvido_em": devolvido_em,
+        }
+        assert emprestimos.marcar_devolvido(conexao, emprestimo, devolvido_em) is None
+        assert emprestimos.marcar_devolvido(conexao, 999_999, devolvido_em) is None
+        assert emprestimos.existe(conexao, emprestimo) and not emprestimos.existe(conexao, 999_999)
+        assert livros.devolver_exemplar(conexao, livro) == 2
