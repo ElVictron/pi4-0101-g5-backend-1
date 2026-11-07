@@ -7,6 +7,7 @@
 | Quem responde | Backend 1 |
 | Atende | E1 |
 | Como chamar | `POST /livros` |
+| Convenções | Formato de erro, status HTTP, limites e datas em [00-convencoes.md](00-convencoes.md) |
 
 ## Entrada
 
@@ -33,5 +34,6 @@
 | Quando | O que volta |
 |---|---|
 | ISBN já cadastrado | Erro `ISBN_DUPLICADO` |
-| Quantidade menor que zero ou igual a zero | Erro `QUANTIDADE_INVALIDA` |
+| Quantidade não inteira, menor que zero ou igual a zero | Erro `QUANTIDADE_INVALIDA` |
+| ISBN fora do formato (10 ou 13 dígitos), título ou autor acima de 200 caracteres, ou campo com tipo errado | Erro `DADOS_INVALIDOS` |
 | Campo obrigatório ausente | Erro `CAMPOS_OBRIGATORIOS` |

@@ -1,0 +1,55 @@
+# Sobe o Backend 1 e o PostgreSQL (card #780, parte do Backend 1).
+# Uso: docker compose up --build   →  API em http://localhost:8000
+# O Backend 2 e o Frontend ficam nos repositórios deles; os blocos abaixo
+# mostram onde eles entram quando o sistema for integrado (card #795).
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: biblioteca
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-biblioteca}
+      POSTGRES_DB: biblioteca
+    volumes:
+      - dados-postgres:/var/lib/postgresql/data
+      # Aplicado só quando o volume é novo (D18). Mudou o schema? Recrie o
+      # banco: docker compose down -v && docker compose up --build
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biblioteca -d biblioteca"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend1:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://biblioteca:${POSTGRES_PASSWORD:-biblioteca}@postgres:5432/biblioteca
+      # Endereço do Backend 2 na rede do Compose; vazio = eventos vão para
+      # eventos_pendentes e podem ser reenviados depois.
+      BACKEND2_URL: ${BACKEND2_URL:-}
+      BACKEND2_TIMEOUT_SEGUNDOS: ${BACKEND2_TIMEOUT_SEGUNDOS:-3}
+      BACKEND2_VERIFY_TLS: ${BACKEND2_VERIFY_TLS:-true}
+      BACKEND2_CA_BUNDLE: ${BACKEND2_CA_BUNDLE:-}
+      CORS_ORIGENS: ${CORS_ORIGENS:-http://localhost:5173}
+      # HTTPS (D10/D14): defina os dois e monte a pasta ./certs.
+      SSL_CERTFILE: ${SSL_CERTFILE:-}
+      SSL_KEYFILE: ${SSL_KEYFILE:-}
+    # volumes:
+    #   - ./certs:/certs:ro
+    ports:
+      - "8000:8000"
+
+  # backend2:            # repositório pi4-0101-g5-backend-2
+  #   build: ../pi4-0101-g5-backend-2
+  #   ports: ["8443:8443"]
+  #
+  # frontend:            # repositório pi4-0101-g5-frontend
+  #   build: ../pi4-0101-g5-frontend
+  #   ports: ["5173:5173"]
+
+volumes:
+  dados-postgres:

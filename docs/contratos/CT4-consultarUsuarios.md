@@ -7,6 +7,7 @@
 | Quem responde | Backend 1 |
 | Atende | E4 |
 | Como chamar | `GET /usuarios?busca={busca}&pagina={pagina}&tamanho={tamanho}` |
+| Convenções | Formato de erro, status HTTP, limites e datas em [00-convencoes.md](00-convencoes.md) |
 
 ## Entrada
 
@@ -39,5 +40,5 @@
 
 | Quando | O que volta |
 |---|---|
-| Página ou tamanho inválidos | Erro `PAGINACAO_INVALIDA` |
-| Busca maior que o limite permitido | Erro `BUSCA_INVALIDA` |
+| Página menor que 1, tamanho fora de 1 a 100, ou valor não inteiro | Erro `PAGINACAO_INVALIDA` |
+| Busca com mais de 100 caracteres | Erro `BUSCA_INVALIDA` |

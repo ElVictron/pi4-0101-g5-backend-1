@@ -7,6 +7,7 @@
 | Quem responde | Backend 1 |
 | Atende | E7 |
 | Como chamar | `GET /livros/disponibilidade?busca={busca}` |
+| Convenções | Formato de erro, status HTTP, limites e datas em [00-convencoes.md](00-convencoes.md) |
 
 ## Entrada
 
@@ -34,4 +35,4 @@
 
 | Quando | O que volta |
 |---|---|
-| Termo de busca inválido | Erro `BUSCA_INVALIDA` |
+| Termo de busca com mais de 100 caracteres | Erro `BUSCA_INVALIDA` |
