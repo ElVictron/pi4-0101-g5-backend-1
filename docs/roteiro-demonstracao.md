@@ -64,6 +64,17 @@ docker compose exec backend1 python -m app.reenviar_eventos
 
 4. O indicador volta para **conectado** e as listas recarregam sozinhas (a tela que já estava aberta recupera os dados na reconexão, CT13). Se abrir a tela com o Backend 2 ainda fora do ar, atualize a página depois que ele voltar.
 
+## Verificação automática com Docker
+
+Para conferir tudo de uma vez (Compose, dados de exemplo, teste das duas abas e nenhum evento pendente), com os três repositórios lado a lado:
+
+```bash
+pip install playwright && playwright install chromium
+python scripts/integracao/verificar_docker.py
+```
+
+O script mostra um resumo com o que passou e o que falhou; `--derrubar` desliga o sistema no fim.
+
 ## Teste automático equivalente
 
 Com o sistema de pé, o mesmo fluxo das seções 3 e 5 roda sozinho:
