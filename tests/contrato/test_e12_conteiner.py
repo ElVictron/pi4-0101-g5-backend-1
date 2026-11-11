@@ -163,9 +163,41 @@ def compose():
     return json.loads(processo.stdout)
 
 
-# D22 · só postgres e backend1 (Backend 2 e Frontend só como comentário)
+# D22/D23 · sistema completo (card #780): postgres, backend1, backend2, frontend e certificados
 def test_compose_servicos(compose):
-    assert set(compose["services"]) == {"postgres", "backend1"}
+    assert set(compose["services"]) == {
+        "postgres",
+        "backend1",
+        "backend2",
+        "frontend",
+        "certificados",
+    }
+
+
+# D23 · Backend 2 só em TLS (8443), com certificado da pasta certs e saúde verificada
+def test_compose_backend2(compose):
+    backend2 = compose["services"]["backend2"]
+
+    assert backend2["environment"]["SSL_CERTFILE"] == "/certs/backend2.pem"
+    assert backend2["environment"]["SSL_KEYFILE"] == "/certs/backend2-key.pem"
+    portas = [p for p in backend2["ports"] if p["target"] == 8443]
+    assert len(portas) == 1
+    assert str(portas[0]["published"]) == "8443"
+    assert backend2["depends_on"]["certificados"]["condition"] == "service_completed_successfully"
+    assert "healthcheck" in backend2
+    certs = [v for v in backend2["volumes"] if v["target"] == "/certs"]
+    assert len(certs) == 1
+    assert certs[0].get("read_only") is True
+
+
+# D23 · frontend chama os backends pelo host; WSS direto no Backend 2
+def test_compose_frontend(compose):
+    frontend = compose["services"]["frontend"]
+    args = frontend["build"]["args"]
+
+    assert args["VITE_API_URL"] == "http://localhost:8000"
+    assert args["VITE_WS_URL"] == "wss://localhost:8443/ws/biblioteca"
+    assert str(frontend["ports"][0]["published"]) == "5173"
 
 
 # D22 · postgres:16, volume persistente e healthcheck com pg_isready
@@ -216,10 +248,22 @@ def test_compose_backend1_ambiente(compose):
     assert url.path.lstrip("/")
 
 
-# §10 / D22 · padrões vazios de BACKEND2_URL e SSL_* (HTTP sem TLS e eventos pendentes)
-@pytest.mark.parametrize("variavel", ["BACKEND2_URL", "SSL_CERTFILE", "SSL_KEYFILE"])
+# §10 / D22 · SSL_* do backend1 vazios por padrão (HTTP, sem TLS)
+@pytest.mark.parametrize("variavel", ["SSL_CERTFILE", "SSL_KEYFILE"])
 def test_compose_padroes_vazios(compose, variavel):
     assert compose["services"]["backend1"]["environment"][variavel] in ("", None)
+
+
+# D23 · Backend 1 chama o Backend 2 por HTTPS, verificando a CA local do Compose
+def test_compose_backend1_aponta_para_o_backend2(compose):
+    ambiente = compose["services"]["backend1"]["environment"]
+
+    assert ambiente["BACKEND2_URL"] == "https://backend2:8443"
+    assert ambiente["BACKEND2_CA_BUNDLE"] == "/certs/ca.pem"
+    assert ambiente["BACKEND2_VERIFY_TLS"] == "true"
+    assert (
+        compose["services"]["backend1"]["depends_on"]["backend2"]["condition"] == "service_healthy"
+    )
 
 
 # --------------------------------------------------------------------------- Dockerfile
