@@ -50,6 +50,10 @@ docker compose up --build
 - O schema é aplicado **só na primeira vez**, com o volume novo. Mudou o `db/schema.sql`? Recrie o banco (apaga os dados): `docker compose down -v && docker compose up --build`.
 - Configuração por variáveis de ambiente (arquivo `.env` ao lado do `docker-compose.yml` ou exportadas no terminal); veja a tabela abaixo.
 
+### Roteiro e teste de integração
+
+Passo a passo da demonstração, com o empréstimo atrasado: [`docs/roteiro-demonstracao.md`](docs/roteiro-demonstracao.md). Com o sistema de pé, `python scripts/integracao/teste_duas_abas.py` confere (Playwright) que um empréstimo ou devolução feito numa aba muda o painel de outra aba sem recarregar (card #795).
+
 ### Dados de exemplo
 
 Para a demonstração (card #802), com o sistema de pé:
