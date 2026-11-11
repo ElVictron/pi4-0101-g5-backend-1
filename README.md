@@ -20,27 +20,49 @@ Especificação: [`docs/contratos/`](docs/contratos/) — comece por [`00-conven
 
 Erros sempre no formato `{"erro": {"codigo": "...", "mensagem": "..."}}`; códigos e status HTTP em [`00-convencoes.md` §3](docs/contratos/00-convencoes.md). O banco (tabelas `livros`, `usuarios`, `emprestimos`, `eventos_pendentes`) está em [`db/schema.sql`](db/schema.sql) e nos contratos CT9 a CT11.
 
-## Subir com Docker Compose
+## Subir o sistema com Docker Compose
 
-Requisitos: Docker com o plugin Compose.
+Sobe o frontend, o Backend 1, o Backend 2 e o PostgreSQL, cada um no seu contêiner (card #780).
+
+Requisitos: Docker com o plugin Compose e os três repositórios lado a lado:
+
+```text
+pi4-0101-g5-backend-1/   (aqui)
+pi4-0101-g5-backend-2/
+pi4-0101-g5-frontend/
+```
 
 ```bash
 docker compose up --build
 ```
 
-- API em `http://localhost:8000` (teste com `curl http://localhost:8000/saude`).
-- PostgreSQL 16 com os dados num volume (`dados-postgres`). O schema é aplicado **só na primeira vez**, com o volume novo. Mudou o `db/schema.sql`? Recrie o banco (apaga os dados): `docker compose down -v && docker compose up --build`.
+| Serviço | Endereço | Observação |
+|---|---|---|
+| Frontend | `http://localhost:5173` | imagem Nginx; o navegador chama os dois backends pelo host |
+| Backend 1 | `http://localhost:8000` | `curl http://localhost:8000/saude` |
+| Backend 2 | `https://localhost:8443` | HTTPS e WSS (`/ws/biblioteca`); só aceita TLS |
+| PostgreSQL 16 | rede interna | dados no volume `dados-postgres` |
+
+- **Certificados.** Na primeira subida, o serviço `certificados` gera em `./certs` uma CA local (`ca.pem`) e o certificado do Backend 2 (nomes `localhost`, `backend2`, `127.0.0.1`). Para gerar fora do Docker: `sh scripts/gerar-certificados.sh` (`FORCE=1` regera). A pasta `certs/` não é versionada.
+- **Backend 1 → Backend 2.** Por HTTPS em `https://backend2:8443`, verificando a CA local (`BACKEND2_CA_BUNDLE=/certs/ca.pem`).
+- **Navegador → Backend 2.** O frontend abre `wss://localhost:8443/ws/biblioteca`. Sem confiar na CA, o navegador recusa o WSS e a tela mostra "desconectado". Importe `certs/ca.pem` como autoridade confiável (Windows: duplo clique, "Instalar certificado", "Autoridades de certificação raiz confiáveis"; Firefox: Configurações → Certificados → Importar). Reinicie o navegador depois.
+- **Só o Backend 1.** `docker compose up --build postgres backend1` (sem Backend 2, os eventos ficam em `eventos_pendentes`).
+- O schema é aplicado **só na primeira vez**, com o volume novo. Mudou o `db/schema.sql`? Recrie o banco (apaga os dados): `docker compose down -v && docker compose up --build`.
 - Configuração por variáveis de ambiente (arquivo `.env` ao lado do `docker-compose.yml` ou exportadas no terminal); veja a tabela abaixo.
 
-### HTTPS
+### Dados de exemplo
 
-Coloque o certificado e a chave em `./certs`, descomente o bloco `volumes` do serviço `backend1` no `docker-compose.yml` e defina:
+Para a demonstração (card #802), com o sistema de pé:
 
 ```bash
-SSL_CERTFILE=/certs/backend1.crt SSL_KEYFILE=/certs/backend1.key docker compose up --build
+docker compose exec -T postgres psql -U biblioteca -d biblioteca < db/dados-demo.sql
 ```
 
-Com as duas variáveis, o `scripts/iniciar.sh` sobe o Uvicorn com TLS; com só uma delas, o contêiner não sobe. A chave precisa ser legível pelo usuário do contêiner (uid 10001), por exemplo `chmod 644` ou `chown 10001` no arquivo.
+Insere 4 livros, 3 usuários e 3 empréstimos, **um deles atrasado** (prazo vencido há 5 dias). Só insere se o banco estiver vazio.
+
+### HTTPS no Backend 1 (opcional)
+
+O Backend 1 sobe em HTTP por padrão. Para HTTPS, defina `SSL_CERTFILE` e `SSL_KEYFILE` apontando para arquivos montados em `/certs`. Com as duas variáveis, o `scripts/iniciar.sh` sobe o Uvicorn com TLS; com só uma delas, o contêiner não sobe. A chave precisa ser legível pelo usuário do contêiner (uid 10001), por exemplo `chmod 644` ou `chown 10001` no arquivo. Se mudar o Backend 1 para HTTPS, ajuste `VITE_API_URL` do frontend para `https://...`.
 
 ## Rodar sem Docker
 
@@ -59,10 +81,10 @@ export DATABASE_URL=postgresql://usuario:senha@localhost:5432/biblioteca
 | Variável | Padrão | Uso |
 |---|---|---|
 | `DATABASE_URL` | — (obrigatória) | conexão PostgreSQL |
-| `BACKEND2_URL` | vazio | base do Backend 2 (ex.: `https://backend2:8443`); vazio = todo evento fica pendente |
+| `BACKEND2_URL` | vazio (no Compose: `https://backend2:8443`) | base do Backend 2 (ex.: `https://backend2:8443`); vazio = todo evento fica pendente |
 | `BACKEND2_TIMEOUT_SEGUNDOS` | `3` | tempo limite de conexão e de leitura da chamada ao Backend 2 |
 | `BACKEND2_VERIFY_TLS` | `true` | verificar o certificado do Backend 2 |
-| `BACKEND2_CA_BUNDLE` | vazio | certificado próprio do Backend 2 (mantém a verificação ligada) |
+| `BACKEND2_CA_BUNDLE` | vazio (no Compose: `/certs/ca.pem`) | certificado próprio do Backend 2 (mantém a verificação ligada) |
 | `CORS_ORIGENS` | vazio (no Compose: `http://localhost:5173`) | origens do Frontend, separadas por vírgula; `*` não é aceito |
 | `SSL_CERTFILE`, `SSL_KEYFILE` | vazio | HTTPS do próprio Backend 1 |
 

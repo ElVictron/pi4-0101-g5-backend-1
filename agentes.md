@@ -24,7 +24,7 @@ Implementar o Backend 1 (API REST em Python + PostgreSQL) a partir da especifica
 | #793 H06.1 | `registrarEmprestimo` (+ publicação no Backend 2) | E9 |
 | #796 H07.1 | `consultarEmprestimos` | E10 |
 | #798 H08.1 | `registrarDevolucao` (+ publicação no Backend 2) | E11 |
-| #780 H01.2 | Infra: Compose | E12 — **parcial** (Backend 1 + PostgreSQL) |
+| #780 H01.2 | Infra: Compose | E12 — Backend 1 + PostgreSQL; completado pelo D23 (sistema completo, 11/11/2026) |
 | #801 H10.1 | Docs: README e release | E13 — **parcial** (README do Backend 1) |
 
 ### 1.2 Fora do escopo
@@ -118,6 +118,7 @@ Decisão do Victor: **3 agentes** (Teste, Backend, Revisor) além do PM. Não ha
 | D20 | Cliente do Backend 2 com `trust_env=False` (não herda proxy, `SSL_CERT_*` nem `.netrc` do ambiente); com `BACKEND2_CA_BUNDLE`, a verificação TLS fica sempre ligada; `ultimo_erro` com no máximo 200 caracteres e sem o payload; no reenvio, evento pulado por estar travado por outro reenvio conta como pendente (código 1) | Revisor, E9 |
 | D21 | Entrega ao Backend 2 é "pelo menos uma vez" e sem ordem garantida: o Backend 2 deve tolerar duplicatas (`tipo` + `emprestimoId`) e eventos fora de ordem (card #795, fora deste plano) | Revisor, E9 |
 | D22 | Contêiner (E12): imagem `python:3.12-slim`, usuário sem privilégios, porta 8000 (alterável por `PORTA`, que o healthcheck acompanha), `HEALTHCHECK` com `GET /saude`; início por `scripts/iniciar.sh`: com `SSL_CERTFILE` **e** `SSL_KEYFILE` → Uvicorn com TLS; sem nenhum → HTTP; só um dos dois → sai com código 1 e mensagem. Compose com `postgres:16` (volume persistente, `db/schema.sql` em `docker-entrypoint-initdb.d`, healthcheck) e `backend1` dependendo do banco saudável; Backend 2 e Frontend só como comentário | PM, E12 |
+| D23 | Compose do sistema completo (card #780, 11/11/2026): `postgres`, `backend1`, `backend2` (só TLS, porta 8443, certificados em `./certs` montados somente leitura), `frontend` (porta 5173) e `certificados` (gera a CA local). `backend1` usa `BACKEND2_URL=https://backend2:8443` e `BACKEND2_CA_BUNDLE=/certs/ca.pem` por padrão e espera o Backend 2 saudável. Substitui, no Compose, a parte do D22 que deixava Backend 2 e Frontend só como comentário | Victor, 11/11/2026 |
 
 ### 4.2 Decisões P1 a P14 — **aprovadas pelo Victor em 06/11/2026**
 
