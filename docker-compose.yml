@@ -1,7 +1,15 @@
-# Sobe o Backend 1 e o PostgreSQL (card #780, parte do Backend 1).
-# Uso: docker compose up --build   →  API em http://localhost:8000
-# O Backend 2 e o Frontend ficam nos repositórios deles; os blocos abaixo
-# mostram onde eles entram quando o sistema for integrado (card #795).
+# Sistema completo (card #780): frontend, Backend 1, Backend 2 e PostgreSQL.
+# Uso: docker compose up --build
+#   Frontend   http://localhost:5173
+#   Backend 1  http://localhost:8000
+#   Backend 2  https://localhost:8443  (HTTPS e WSS; certificado da CA local)
+#
+# Os repositórios do Backend 2 e do Frontend precisam estar ao lado deste
+# (../pi4-0101-g5-backend-2 e ../pi4-0101-g5-frontend). Para só o Backend 1
+# e o PostgreSQL: docker compose up --build postgres backend1
+#
+# Os certificados são gerados na primeira subida, na pasta ./certs. Para o
+# navegador aceitar o WSS sem aviso, confie no certs/ca.pem (README).
 
 services:
   postgres:
@@ -21,35 +29,75 @@ services:
       timeout: 5s
       retries: 10
 
+  # Gera a CA local e o certificado do Backend 2 em ./certs (uma vez só).
+  certificados:
+    image: alpine:3
+    command: sh -c "apk add --no-cache openssl >/dev/null && CERTS_DIR=/certs sh /scripts/gerar-certificados.sh"
+    volumes:
+      - ./certs:/certs
+      - ./scripts:/scripts:ro
+
   backend1:
     build: .
     depends_on:
       postgres:
         condition: service_healthy
+      backend2:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://biblioteca:${POSTGRES_PASSWORD:-biblioteca}@postgres:5432/biblioteca
-      # Endereço do Backend 2 na rede do Compose; vazio = eventos vão para
-      # eventos_pendentes e podem ser reenviados depois.
-      BACKEND2_URL: ${BACKEND2_URL:-}
+      # Endereço do Backend 2 na rede do Compose (HTTPS, verificando a CA local).
+      # Vazio = eventos vão para eventos_pendentes e podem ser reenviados depois.
+      BACKEND2_URL: ${BACKEND2_URL-https://backend2:8443}
       BACKEND2_TIMEOUT_SEGUNDOS: ${BACKEND2_TIMEOUT_SEGUNDOS:-3}
       BACKEND2_VERIFY_TLS: ${BACKEND2_VERIFY_TLS:-true}
-      BACKEND2_CA_BUNDLE: ${BACKEND2_CA_BUNDLE:-}
+      BACKEND2_CA_BUNDLE: ${BACKEND2_CA_BUNDLE-/certs/ca.pem}
       CORS_ORIGENS: ${CORS_ORIGENS:-http://localhost:5173}
       # HTTPS (D10/D14): defina os dois e monte a pasta ./certs.
       SSL_CERTFILE: ${SSL_CERTFILE:-}
       SSL_KEYFILE: ${SSL_KEYFILE:-}
-    # volumes:
-    #   - ./certs:/certs:ro
+    volumes:
+      - ./certs:/certs:ro
     ports:
       - "8000:8000"
 
-  # backend2:            # repositório pi4-0101-g5-backend-2
-  #   build: ../pi4-0101-g5-backend-2
-  #   ports: ["8443:8443"]
-  #
-  # frontend:            # repositório pi4-0101-g5-frontend
-  #   build: ../pi4-0101-g5-frontend
-  #   ports: ["5173:5173"]
+  backend2:
+    build: ../pi4-0101-g5-backend-2
+    depends_on:
+      certificados:
+        condition: service_completed_successfully
+    environment:
+      SSL_CERTFILE: /certs/backend2.pem
+      SSL_KEYFILE: /certs/backend2-key.pem
+    volumes:
+      - ./certs:/certs:ro
+    healthcheck:
+      # Só confere que o servidor TLS responde; a CA é verificada pelo Backend 1.
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import ssl, urllib.request as u;
+          c = ssl.create_default_context(); c.check_hostname = False; c.verify_mode = ssl.CERT_NONE;
+          u.urlopen('https://127.0.0.1:8443/saude', context=c, timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "8443:8443"
+
+  frontend:
+    build:
+      context: ../pi4-0101-g5-frontend
+      args:
+        # O navegador chama o Backend 1 e o Backend 2 pelo host, não pela rede do Compose.
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_WS_URL: ${VITE_WS_URL:-wss://localhost:8443/ws/biblioteca}
+    depends_on:
+      - backend1
+    ports:
+      - "5173:80"
 
 volumes:
   dados-postgres:
