@@ -16,7 +16,7 @@ Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend
 
 ## Capítulo 1. Visão geral
 
-**Responsável:** _a definir_
+**Responsável:** Gabriel Gregorio Ribeiro Leite
 
 **Problema.** Hoje o responsável pela biblioteca controla livros, usuários e empréstimos de forma manual, por registros e planilhas. Isso dificulta verificar rapidamente quais livros estão disponíveis e acompanhar empréstimos e devoluções. A evidência é uma conversa com o responsável por uma biblioteca, que relatou o controle manual em planilhas e a dificuldade de saber a disponibilidade dos livros e de acompanhar as devoluções (Entrega 1). As planilhas também não impedem erros como emprestar um livro sem exemplar livre ou cadastrar o mesmo usuário duas vezes.
 
@@ -50,7 +50,7 @@ Durante o desenvolvimento ficaram de fora também, sem constar na Entrega 1: log
 
 ## Capítulo 2. Objetivos
 
-**Responsável:** _a definir_
+**Responsável:** Gabriel Gregorio Ribeiro Leite
 
 **Objetivo geral.** Construir um sistema web de gerenciamento de biblioteca que permita controlar livros, usuários e empréstimos, facilitando o acompanhamento da disponibilidade dos exemplares e das devoluções (Entrega 1).
 
@@ -69,7 +69,7 @@ Na implementação, acrescentamos como metas técnicas: atualizar o painel de di
 
 ## Capítulo 3. Requisitos
 
-**Responsável:** _a definir_
+**Responsável:** Gabriel Gregorio Ribeiro Leite
 
 ### 3.1 Requisitos funcionais
 
@@ -187,7 +187,7 @@ As frases "feito quando" e os tamanhos (P ou M) vêm da Entrega 1. A prioridade 
 
 ## Capítulo 4. Arquitetura
 
-**Responsável:** _a definir_
+**Responsável:** Victor Hugo Gulino dos Santos
 
 ### 4.1 Visão da arquitetura
 
@@ -254,7 +254,7 @@ O serviço `certificados` gera, na primeira subida, uma CA local e os certificad
 
 ## Capítulo 5. Banco de dados
 
-**Responsável:** _a definir_
+**Responsável:** Lucas Joaquim de Souza
 
 Fonte: [`db/schema.sql`](../db/schema.sql), aplicado ao criar o volume do PostgreSQL.
 
@@ -306,7 +306,7 @@ erDiagram
 
 ## Capítulo 6. Contratos e decisões
 
-**Responsável:** _a definir_
+**Responsável:** Lucas Joaquim de Souza
 
 Os contratos e os ADRs ficam no repositório de cada módulo. Aqui estão só os links.
 
