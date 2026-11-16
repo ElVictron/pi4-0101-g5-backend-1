@@ -143,8 +143,13 @@ def main():
             assert aba_painel.evaluate("window.__marcador") == "sem-recarregar", "a aba recarregou"
             passo(f"painel voltou para 2 sem recarregar, {ms_devolucao} ms")
             # Tempo medido do clique até a outra aba mostrar o valor (inclui API, evento e tela).
-            assert ms_emprestimo <= LIMITE_MS, f"empréstimo levou {ms_emprestimo} ms (RNF-04)"
-            assert ms_devolucao <= LIMITE_MS, f"devolução levou {ms_devolucao} ms (RNF-04)"
+            lentos = [
+                f"{nome} levou {ms} ms"
+                for nome, ms in (("empréstimo", ms_emprestimo), ("devolução", ms_devolucao))
+                if ms > LIMITE_MS
+            ]
+            if lentos:
+                raise AssertionError("RNF-04 não atendido: " + "; ".join(lentos))
             passo(f"RNF-04: ambos dentro de {LIMITE_MS} ms")
             if pasta:
                 aba_painel.screenshot(path=str(pasta / "3-painel-depois-da-devolucao.png"))
