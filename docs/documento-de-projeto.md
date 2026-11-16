@@ -8,7 +8,9 @@ PUC-Campinas · Sistemas de Informação · Projeto Integrador IV · 2026-2 · T
 | Lucas Joaquim | 24020901 |
 | Gabriel Gregorio | 20060547 |
 
-Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend-1>. Os outros dois módulos estão no capítulo 11.
+Orientador: Douglas Henrique de Siqueira de Abreu.
+
+Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend-1>. Os outros módulos e o repositório da Entrega 1 estão no capítulo 11.
 
 ---
 
@@ -16,7 +18,7 @@ Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend
 
 **Responsável:** _a definir_
 
-**Problema.** Uma biblioteca pequena controla livros, leitores e empréstimos em planilhas. Quem atende não vê, na hora, quantos exemplares de um título estão livres, nem quais empréstimos passaram do prazo. Dois atendentes com a planilha aberta enxergam números diferentes, e a conferência é manual. As planilhas não impedem erros como emprestar um livro sem exemplar livre ou cadastrar o mesmo leitor duas vezes.
+**Problema.** Hoje o responsável pela biblioteca controla livros, usuários e empréstimos de forma manual, por registros e planilhas. Isso dificulta verificar rapidamente quais livros estão disponíveis e acompanhar empréstimos e devoluções. A evidência é uma conversa com o responsável por uma biblioteca, que relatou o controle manual em planilhas e a dificuldade de saber a disponibilidade dos livros e de acompanhar as devoluções (Entrega 1). As planilhas também não impedem erros como emprestar um livro sem exemplar livre ou cadastrar o mesmo usuário duas vezes.
 
 **Público.**
 
@@ -33,12 +35,16 @@ Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend
 - E7: ver quais livros têm exemplares disponíveis, com atualização automática entre telas abertas, sem recarregar a página.
 - E8: ver os empréstimos ativos, devolvidos e atrasados.
 
-**Fora do escopo.** Não fazem parte desta versão:
+**Fora do escopo.**
 
-- Login e perfis de acesso. O sistema não autentica quem usa as telas nem quem publica eventos no Backend 2 (limite conhecido, capítulo 7).
-- Edição e exclusão de livros e usuários, renovação de empréstimo, multa e reserva de livro.
-- Notificação ao leitor (e-mail ou mensagem) sobre atraso.
-- Exposição na internet. O sistema foi feito para rodar em uma máquina com Docker, em rede local.
+| O que fica de fora | Por quê |
+|---|---|
+| Aplicativo mobile nativo | O projeto é uma aplicação web responsiva, sem segunda aplicação para manter |
+| Sistema de multas e pagamentos | Traria regras financeiras desnecessárias ao objetivo principal |
+| Reserva de livros | Aumentaria a complexidade do controle de disponibilidade |
+| Integração com bibliotecas externas | Exigiria APIs e serviços externos |
+
+Durante o desenvolvimento ficaram de fora também, sem constar na Entrega 1: login e perfis de acesso (o sistema não autentica quem usa as telas nem quem publica eventos no Backend 2, limite conhecido do capítulo 7), edição e exclusão de livros e usuários, renovação de empréstimo e aviso ao usuário sobre atraso. O sistema foi feito para rodar numa máquina com Docker, em rede local.
 
 ---
 
@@ -46,18 +52,18 @@ Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend
 
 **Responsável:** _a definir_
 
-**Objetivo geral.** O responsável da biblioteca sabe, numa tela só, quais livros têm exemplar livre e quais empréstimos estão ativos ou atrasados, e vê qualquer empréstimo ou devolução feito em outra tela aparecer sem recarregar a página.
+**Objetivo geral.** Construir um sistema web de gerenciamento de biblioteca que permita controlar livros, usuários e empréstimos, facilitando o acompanhamento da disponibilidade dos exemplares e das devoluções (Entrega 1).
 
 **Objetivos específicos.**
 
-1. Registrar livros, usuários e empréstimos num banco único (PostgreSQL), com regras que impedem ISBN ou CPF repetidos e empréstimo sem exemplar livre.
-2. Calcular a situação de cada empréstimo (ativo, devolvido ou atrasado) a partir do prazo de 15 dias.
-3. Mostrar a disponibilidade dos livros num painel que se atualiza sozinho, por um segundo backend que distribui eventos em tempo real.
-4. Manter o sistema funcionando quando o segundo backend cai, guardando os eventos para reenvio.
-5. Usar conexões cifradas (HTTPS e WSS) entre os módulos.
-6. Subir o sistema inteiro com um comando, em qualquer máquina com Docker.
+- **OE1.** Cadastrar e consultar livros e seus exemplares (E1, E2).
+- **OE2.** Cadastrar e consultar usuários da biblioteca (E3, E4).
+- **OE3.** Registrar empréstimos e devoluções de livros (E5, E6).
+- **OE4.** Acompanhar a disponibilidade dos livros e os empréstimos em andamento (E7, E8).
 
-**Critério de sucesso.** Com duas abas abertas, um empréstimo registrado numa aba muda a quantidade disponível no painel da outra em até 2 segundos, sem recarregar; ao devolver, o painel volta ao valor anterior. Esse cenário é o teste de ponta a ponta do capítulo 7 (TE-04).
+Na implementação, acrescentamos como metas técnicas: atualizar o painel de disponibilidade sozinho entre telas abertas (por um segundo backend), manter o sistema funcionando se esse backend cair, usar conexões cifradas entre os módulos e subir tudo com um comando.
+
+**Critério de sucesso.** Em dezembro, o responsável pela biblioteca consegue cadastrar e consultar livros e usuários, realizar empréstimos e devoluções e verificar a disponibilidade dos exemplares por meio do sistema, sem controle manual (Entrega 1). Medimos o critério com o teste de ponta a ponta do capítulo 7: com duas abas abertas, um empréstimo registrado numa aba muda a disponibilidade no painel da outra em até 2 segundos, sem recarregar, e a devolução faz o caminho inverso (TE-04).
 
 ---
 
@@ -69,10 +75,10 @@ Repositório principal (este): <https://github.com/ElVictron/pi4-0101-g5-backend
 
 Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 6. Situação em 16/11/2026: todos prontos.
 
-<!-- CONFIRMAR prioridades e frases "feito quando" com o texto da Entrega 1 -->
+As frases "feito quando" e os tamanhos (P ou M) vêm da Entrega 1. A prioridade foi definida pelo grupo para esta entrega: Alta para o que o responsável não consegue trabalhar sem (E1, E3, E5, E6), Média para as consultas.
 
 ### E1: Cadastro de livros
-**Prioridade:** Alta · **Situação:** pronto
+**Prioridade:** Alta · **Tamanho:** M · **Situação:** pronto
 **Feito quando:** o responsável cadastra um livro com título, autor, ISBN e quantidade de exemplares, e o livro aparece na lista.
 **Critérios de aceite:**
 - A quantidade de exemplares é de no mínimo 1, e o livro nasce com todos os exemplares disponíveis.
@@ -82,7 +88,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E1-cadastro-de-livros.md](fluxos/E1-cadastro-de-livros.md) · **Contratos:** CT1 cadastrarLivro, CT9 livros
 
 ### E2: Consulta de livros
-**Prioridade:** Média · **Situação:** pronto
+**Prioridade:** Média · **Tamanho:** P · **Situação:** pronto
 **Feito quando:** o responsável pesquisa um livro e visualiza seus dados e a quantidade disponível.
 **Critérios de aceite:**
 - A busca ignora maiúsculas e acentos.
@@ -92,7 +98,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E2-consulta-de-livros.md](fluxos/E2-consulta-de-livros.md) · **Contratos:** CT2 consultarLivros, CT9 livros
 
 ### E3: Cadastro de usuários
-**Prioridade:** Alta · **Situação:** pronto
+**Prioridade:** Alta · **Tamanho:** M · **Situação:** pronto
 **Feito quando:** o responsável cadastra um usuário com nome, CPF e contato, e ele aparece na lista.
 **Critérios de aceite:**
 - O CPF é guardado só com os 11 dígitos, sem pontos nem traço.
@@ -102,7 +108,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E3-cadastro-de-usuarios.md](fluxos/E3-cadastro-de-usuarios.md) · **Contratos:** CT3 cadastrarUsuario, CT10 usuarios
 
 ### E4: Consulta de usuários
-**Prioridade:** Média · **Situação:** pronto
+**Prioridade:** Média · **Tamanho:** P · **Situação:** pronto
 **Feito quando:** o responsável pesquisa um usuário e visualiza seus dados e empréstimos.
 **Critérios de aceite:**
 - A busca encontra por nome (sem acento nem maiúsculas) ou por trecho do CPF.
@@ -111,7 +117,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E4-consulta-de-usuarios.md](fluxos/E4-consulta-de-usuarios.md) · **Contratos:** CT4 consultarUsuarios, CT10 usuarios, CT11 emprestimos
 
 ### E5: Registro de empréstimo
-**Prioridade:** Alta · **Situação:** pronto
+**Prioridade:** Alta · **Tamanho:** M · **Situação:** pronto
 **Feito quando:** o responsável seleciona um usuário e um livro disponível, e o empréstimo é registrado no sistema.
 **Critérios de aceite:**
 - O prazo de devolução é de 15 dias após o empréstimo.
@@ -122,7 +128,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E5-registro-de-emprestimo.md](fluxos/E5-registro-de-emprestimo.md) · **Contratos:** CT5 registrarEmprestimo, CT9, CT10, CT11, CT12, CT13
 
 ### E6: Registro de devolução
-**Prioridade:** Alta · **Situação:** pronto
+**Prioridade:** Alta · **Tamanho:** M · **Situação:** pronto
 **Feito quando:** o responsável registra a devolução de um livro e o exemplar volta a ficar disponível.
 **Critérios de aceite:**
 - A devolução aumenta em 1 a quantidade disponível.
@@ -132,7 +138,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E6-registro-de-devolucao.md](fluxos/E6-registro-de-devolucao.md) · **Contratos:** CT6 registrarDevolucao, CT9, CT11, CT12, CT13
 
 ### E7: Controle de disponibilidade
-**Prioridade:** Média · **Situação:** pronto
+**Prioridade:** Média · **Tamanho:** M · **Situação:** pronto
 **Feito quando:** o sistema apresenta quais livros possuem exemplares disponíveis para empréstimo.
 **Critérios de aceite:**
 - O painel lista os livros com a quantidade disponível.
@@ -142,7 +148,7 @@ Cada E tem um fluxo em `docs/fluxos/` e usa contratos CT descritos no capítulo 
 **Fluxo:** [E7-controle-de-disponibilidade.md](fluxos/E7-controle-de-disponibilidade.md) · **Contratos:** CT7 listarDisponibilidade, CT12, CT13
 
 ### E8: Consulta de empréstimos
-**Prioridade:** Média · **Situação:** pronto
+**Prioridade:** Média · **Tamanho:** M · **Situação:** pronto
 **Feito quando:** o responsável visualiza os empréstimos ativos, devolvidos e atrasados.
 **Critérios de aceite:**
 - O filtro de situação aceita `ativo`, `devolvido` e `atrasado`; outro valor é recusado (`STATUS_INVALIDO`).
@@ -198,7 +204,7 @@ flowchart TB
         certificados["certificados<br/>gera a CA local e o certificado<br/>(roda uma vez)"]
     end
     responsavel -->|usa o navegador| frontend
-    frontend -->|CT1 a CT8: JSON| backend1
+    frontend -->|CT1 a CT8: HTTPS/JSON| backend1
     backend1 -->|CT9 a CT11: SQL| banco
     backend1 -->|CT12 publicarAtualizacao: HTTPS/JSON| backend2
     backend2 -->|CT13 bibliotecaAtualizada: WSS/JSON| frontend
@@ -214,12 +220,12 @@ Fonte: [`docker-compose.yml`](../docker-compose.yml) deste repositório. Os repo
 | postgres | `postgres:16` | 5432 | não (só na rede do Compose) | nenhum |
 | certificados | `alpine:3` | n/a | n/a (roda e termina) | nenhum |
 | backend2 | build de `../pi4-0101-g5-backend-2` (Python 3.12) | 8443 (HTTPS/WSS) | sim, `8443:8443` | certificados (concluído) |
-| backend1 | build de `.` (Python 3.12) | 8000 | sim, `8000:8000` | postgres (saudável) e backend2 (saudável) |
+| backend1 | build de `.` (Python 3.12) | 8000 (HTTPS) | sim, `8000:8000` | certificados (concluído), postgres (saudável) e backend2 (saudável) |
 | frontend | build de `../pi4-0101-g5-frontend` (Node, servido por Nginx) | 80 | sim, `5173:80` | backend1 |
 
-Dentro da rede do Compose, cada serviço é encontrado pelo nome: o Backend 1 chama `https://backend2:8443` e o banco em `postgres:5432`. O navegador, que roda fora da rede do Compose, chama o Backend 1 em `localhost:8000` e o Backend 2 em `wss://localhost:8443`. Por isso o frontend recebe `VITE_API_URL` e `VITE_WS_URL` no build.
+Dentro da rede do Compose, cada serviço é encontrado pelo nome: o Backend 1 chama `https://backend2:8443` e o banco em `postgres:5432`. O navegador, que roda fora da rede do Compose, chama o Backend 1 em `https://localhost:8000` e o Backend 2 em `wss://localhost:8443`. Por isso o frontend recebe `VITE_API_URL` e `VITE_WS_URL` no build.
 
-O serviço `certificados` gera, na primeira subida, uma CA local e o certificado do Backend 2 (válido para `localhost` e `backend2`) na pasta `certs/`. O Backend 1 verifica o certificado com a CA (`BACKEND2_CA_BUNDLE=/certs/ca.pem`). Para o navegador aceitar o WSS sem aviso, é preciso confiar em `certs/ca.pem` (passos no README).
+O serviço `certificados` gera, na primeira subida, uma CA local e os certificados do Backend 1 e do Backend 2 (válidos para `localhost` e para o nome do serviço) na pasta `certs/`. O Backend 1 verifica o certificado do Backend 2 com a CA (`BACKEND2_CA_BUNDLE=/certs/ca.pem`). Para o navegador aceitar o HTTPS do Backend 1 e o WSS do Backend 2 sem aviso, é preciso confiar em `certs/ca.pem` (passos no README).
 
 ### 4.3 Comunicação entre os backends e as telas
 
