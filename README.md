@@ -50,7 +50,7 @@ Projeto Integrador IV (PUC-Campinas, Sistemas de Informação, turma 102, grupo 
    ```bash
    docker compose exec -T postgres psql -U biblioteca -d biblioteca < db/dados-demo.sql
    ```
-5. Confie na autoridade certificadora local no navegador, para ele aceitar o HTTPS do Backend 1 e o WSS do Backend 2: importe o arquivo `certs/ca.pem` como "autoridade de certificação raiz confiável" (Windows: duplo clique, "Instalar certificado", "Autoridades de Certificação Raiz Confiáveis"; Firefox: Configurações, Certificados, Importar) e reinicie o navegador.
+5. Confie na autoridade certificadora local no navegador, para ele aceitar o HTTPS do Backend 1 e o WSS do Backend 2: importe o arquivo `certs/ca.pem` como "autoridade de certificação raiz confiável" (Windows: duplo clique, "Instalar certificado", "Autoridades de Certificação Raiz Confiáveis"; Firefox: Configurações, Certificados, Importar; Chrome ou Edge no Linux: `sudo apt install libnss3-tools` e `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "Biblioteca CA local" -i certs/ca.pem`) e reinicie o navegador por completo.
 6. Abra <http://localhost:5173>. O indicador do canto superior direito deve mostrar **Tempo real: conectado**.
 
 Para desligar: `docker compose down` (mantém os dados) ou `docker compose down -v` (apaga também o banco).
