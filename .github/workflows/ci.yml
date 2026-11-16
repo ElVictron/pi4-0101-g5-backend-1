@@ -38,10 +38,13 @@ jobs:
           --health-retries 10
 
     env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/biblioteca_teste
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # o Sonar usa o histórico para atribuir o código novo
 
       - uses: actions/setup-python@v5
         with:
@@ -61,4 +64,10 @@ jobs:
         run: ruff format --check .
 
       - name: Testes (contrato + unitários) com cobertura
-        run: pytest -q --cov=app --cov-report=term-missing --cov-fail-under=85
+        run: pytest -q --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=85
+
+      # Só roda na versão principal do Python e quando o segredo SONAR_TOKEN existe
+      # (PRs de forks não recebem segredos; sem token o passo é pulado).
+      - name: Análise no SonarQube Cloud
+        if: matrix.python == '3.12' && env.SONAR_TOKEN != ''
+        uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
