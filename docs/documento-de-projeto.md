@@ -401,10 +401,10 @@ Os defeitos abertos na entrega, com a severidade da tabela do enunciado. Cada um
 
 | Defeito | Severidade | Módulo | Teste | Card |
 |---|---|---|---|---|
-| `POST /eventos/biblioteca` aceita eventos sem autenticação | Média | Backend 2 | TE-07 | a registrar no OpenProject |
-| O WebSocket não confere a origem (`Origin`) da conexão | Baixa | Backend 2 | TE-07 | a registrar no OpenProject |
-| Com o Backend 2 fora do ar ao abrir a tela, as listas só atualizam depois de uma reconexão | Baixa | Frontend | TE-08 | a registrar no OpenProject |
-| O reenvio de eventos pendentes é manual (`python -m app.reenviar_eventos`) | Baixa | Backend 1 | TE-03 | a registrar no OpenProject |
+| `POST /eventos/biblioteca` aceita eventos sem autenticação | Média | Backend 2 | TE-07 | [#1388](https://srv1889234.hstgr.cloud/work_packages/1388) |
+| O WebSocket não confere a origem (`Origin`) da conexão | Baixa | Backend 2 | TE-07 | [#1389](https://srv1889234.hstgr.cloud/work_packages/1389) |
+| Com o Backend 2 fora do ar ao abrir a tela, as listas só atualizam depois de uma reconexão | Baixa | Frontend | TE-08 | [#1390](https://srv1889234.hstgr.cloud/work_packages/1390) |
+| O reenvio de eventos pendentes é manual (`python -m app.reenviar_eventos`) | Baixa | Backend 1 | TE-03 | [#1391](https://srv1889234.hstgr.cloud/work_packages/1391) |
 
 As duas primeiras ficaram de fora por decisão do grupo (11/11/2026): o sistema é para uma rede local e o evento não leva dados do usuário. A entrega "pelo menos uma vez" e fora de ordem não é defeito: é a decisão do ADR 0006, coberta no TE-08.
 
