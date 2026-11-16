@@ -18,7 +18,7 @@ a cada execução, sem mexer nos dados existentes. Código de saída 0 = passou.
 
 import argparse
 import json
-import random
+import secrets
 import ssl
 import sys
 import time
@@ -67,7 +67,7 @@ def main():
     titulo = f"Livro de integração {sufixo}"
     nome = f"Leitor de integração {sufixo}"
     isbn = "978" + sufixo.rjust(10, "0")[-10:]
-    cpf = "".join(str(random.randint(0, 9)) for _ in range(11))
+    cpf = "".join(secrets.choice("0123456789") for _ in range(11))
     pasta = Path(args.prints) if args.prints else None
     if pasta:
         pasta.mkdir(parents=True, exist_ok=True)
