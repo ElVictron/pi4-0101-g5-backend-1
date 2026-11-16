@@ -1,7 +1,8 @@
 """E12 — contêiner do Backend 1 (card #780, parte do Backend 1).
 
 Fontes: `agentes.md` §7 E12, D14, D18 e D22; `00-convencoes.md` §9 e §10. Sem daemon
-Docker neste ambiente: o `Dockerfile` e o `.dockerignore` são validados pelo texto; o `scripts/iniciar.sh`, executado com um `uvicorn` falso.
+Docker neste ambiente: o `Dockerfile` e o `.dockerignore` são validados pelo texto; o
+`scripts/iniciar.sh`, executado com um `uvicorn` falso.
 """
 
 import os
