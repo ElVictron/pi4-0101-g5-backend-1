@@ -8,7 +8,7 @@ aba, sem recarregar, e que a devolução faz o caminho inverso (CT5, CT6, CT12, 
 Uso:
     pip install playwright && playwright install chromium
     python scripts/integracao/teste_duas_abas.py \
-        [--frontend http://localhost:5173] [--api https://localhost:8000] \
+        [--frontend http://localhost:5173] [--api https://localhost:8000] [--ca certs/ca.pem] \
         [--prints pasta] [--mostrar]
 
 Os certificados dos dois backends são da CA local do Compose; o navegador do teste ignora
@@ -29,9 +29,11 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 TEMPO_MS = 10_000
+# RNF-04: o painel de outra aba muda em até 2 segundos depois da ação.
+LIMITE_MS = 2_000
 # O Backend 1 usa o certificado da CA local do Compose; a API é chamada conferindo-o.
 CA_LOCAL = Path(__file__).resolve().parents[2] / "certs" / "ca.pem"
-CONTEXTO_TLS = ssl.create_default_context(cafile=CA_LOCAL) if CA_LOCAL.exists() else None
+CONTEXTO_TLS = None  # definido em main() a partir de --ca
 
 
 def chamar_api(base, metodo, caminho, corpo=None):
@@ -56,12 +58,16 @@ def quantidade(pagina, titulo):
 
 
 def main():
+    global CONTEXTO_TLS
     analisador = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     analisador.add_argument("--frontend", default="http://localhost:5173")
     analisador.add_argument("--api", default="https://localhost:8000")
+    analisador.add_argument("--ca", default=str(CA_LOCAL), help="CA que assinou o Backend 1")
     analisador.add_argument("--prints", help="pasta para salvar capturas de tela")
     analisador.add_argument("--mostrar", action="store_true", help="abre o navegador visível")
     args = analisador.parse_args()
+    if Path(args.ca).exists():
+        CONTEXTO_TLS = ssl.create_default_context(cafile=args.ca)
 
     sufixo = str(int(time.time()))
     titulo = f"Livro de integração {sufixo}"
@@ -112,6 +118,7 @@ def main():
             aba_emprestimo.get_by_role("button", name="Buscar usuário").click()
             aba_emprestimo.get_by_label(f"{nome} (CPF {cpf})").check()
             aba_emprestimo.get_by_label("Livro").select_option(label=f"{titulo} (disponíveis: 2)")
+            inicio = time.perf_counter()
             aba_emprestimo.get_by_role("button", name="Registrar empréstimo").click()
             expect(aba_emprestimo.get_by_text("Empréstimo registrado.")).to_be_visible(
                 timeout=TEMPO_MS
@@ -119,19 +126,31 @@ def main():
             passo("empréstimo registrado na outra aba")
 
             expect(quantidade(aba_painel, titulo)).to_have_text("1", timeout=TEMPO_MS)
+            ms_emprestimo = int((time.perf_counter() - inicio) * 1000)
             assert aba_painel.evaluate("window.__marcador") == "sem-recarregar", "a aba recarregou"
-            passo("painel passou de 2 para 1 sem recarregar (CT12 + CT13)")
+            passo(f"painel passou de 2 para 1 sem recarregar (CT12 + CT13), {ms_emprestimo} ms")
             if pasta:
                 aba_painel.screenshot(path=str(pasta / "2-painel-depois-do-emprestimo.png"))
 
             linha = aba_emprestimo.locator("table[aria-label='Empréstimos'] tr", has_text=titulo)
+            inicio = time.perf_counter()
             linha.get_by_role("button", name="Devolver").first.click()
             expect(linha.first).to_contain_text("Devolvido", timeout=TEMPO_MS)
             passo("devolução registrada na outra aba")
 
             expect(quantidade(aba_painel, titulo)).to_have_text("2", timeout=TEMPO_MS)
+            ms_devolucao = int((time.perf_counter() - inicio) * 1000)
             assert aba_painel.evaluate("window.__marcador") == "sem-recarregar", "a aba recarregou"
-            passo("painel voltou para 2 sem recarregar")
+            passo(f"painel voltou para 2 sem recarregar, {ms_devolucao} ms")
+            # Tempo medido do clique até a outra aba mostrar o valor (inclui API, evento e tela).
+            lentos = [
+                f"{nome} levou {ms} ms"
+                for nome, ms in (("empréstimo", ms_emprestimo), ("devolução", ms_devolucao))
+                if ms > LIMITE_MS
+            ]
+            if lentos:
+                raise AssertionError("RNF-04 não atendido: " + "; ".join(lentos))
+            passo(f"RNF-04: ambos dentro de {LIMITE_MS} ms")
             if pasta:
                 aba_painel.screenshot(path=str(pasta / "3-painel-depois-da-devolucao.png"))
         except Exception as erro:
