@@ -11,5 +11,3 @@ build/
 dist/
 .env
 
-# certificados locais (scripts/gerar-certificados.sh)
-certs/
