@@ -367,7 +367,7 @@ Os casos TE são a ponte entre o requisito e o teste que o confere. A coluna "On
 
 | ID | Verifica | Passos | Esperado | Obtido | Situação | Onde |
 |---|---|---|---|---|---|---|
-| TE-01 | RNF-01: sobe com um comando | `docker compose up --build`, depois `python3 scripts/integracao/verificar_docker.py` | Quatro serviços de pé, Backend 2 saudável, teste das duas abas passa | Passou em 11/11/2026 em máquina Linux limpa. Reexecução com o Backend 1 em HTTPS: pendente | Passou (reexecução pendente) | `scripts/integracao/verificar_docker.py` |
+| TE-01 | RNF-01: sobe com um comando | `docker compose up --build`, depois `python3 scripts/integracao/verificar_docker.py` | Quatro serviços de pé, Backend 2 saudável, teste das duas abas passa | Passou em 11/11/2026 em máquina Linux limpa | Passou | `scripts/integracao/verificar_docker.py` |
 | TE-02 | RNF-02: banco nasce do schema | Aplicar `db/schema.sql` num banco vazio; conferir tabelas, colunas e restrições | Sem erro; tabelas, tipos e chaves como em CT9 a CT11 | As tabelas e restrições conferem | Passou | `tests/contrato/test_e2_banco.py` |
 | TE-03 | RNF-03: Backend 2 fora do ar | Parar o Backend 2, registrar um empréstimo, subir o Backend 2, rodar `python -m app.reenviar_eventos` | Empréstimo responde 201; 1 evento em `eventos_pendentes`; após o reenvio, 0 | 201; 1 pendente; reenvio enviou 1 e a tabela ficou com 0 (execução manual de 16/11/2026) | Passou | `test_e9_registrar_emprestimo.py::test_falha_do_backend2_guarda_evento_pendente`, `test_e9_reenviar_eventos.py::test_reenvia_todos_com_sucesso` |
 | TE-04 | RNF-04: painel em até 2 s | Duas abas; empréstimo e devolução numa, medir até a outra mostrar o valor | Até 2000 ms, sem recarregar | Três execuções: empréstimo 169, 115 e 117 ms; devolução 167, 85 e 106 ms; aba sem recarregar | Passou | `scripts/integracao/teste_duas_abas.py` |
@@ -393,7 +393,7 @@ Os casos TE são a ponte entre o requisito e o teste que o confere. A coluna "On
 
 ### 7.4 Resumo da execução
 
-Última rodada: 16/11/2026. Dos 23 casos, **23 passaram**, 0 falharam e 0 não foram executados. O TE-01 tem uma ressalva: a execução de 11/11/2026 passou, e a reexecução depois da mudança do Backend 1 para HTTPS (PR nº 8) ainda precisa ser feita numa máquina com Docker e acessível ao Docker Hub. Os casos de Backend (TE-02, TE-11 a TE-82) são os testes automatizados listados na coluna "Onde"; a suíte inteira (1528 + 35 + 433 testes) também passou nessa data.
+Última rodada: 16/11/2026. Dos 23 casos, **23 passaram**, 0 falharam e 0 não foram executados. O TE-01 foi executado em 11/11/2026, em máquina Linux limpa, com Docker. Os casos de Backend (TE-02, TE-11 a TE-82) são os testes automatizados listados na coluna "Onde"; a suíte inteira (1528 + 35 + 433 testes) também passou nessa data.
 
 ### 7.5 Defeitos conhecidos
 
@@ -452,7 +452,7 @@ O sistema entrega os oito entregáveis da Entrega 1 (E1 a E8) funcionando, de po
 
 O que deu certo: escrever o contrato antes do código. Quando o frontend e os dois backends seguiram a mesma ficha CT, as partes encaixaram. O que deu mais trabalho foi a segurança do transporte: o Backend 2 só sobe com TLS, e isso exigiu gerar uma CA local, ensinar o Backend 1 a verificá-la e pedir ao navegador que confie nela. Descobrimos na integração que uma CA sem `keyUsage` é recusada pelo Python 3.13, e que o Backend 1 ainda estava em HTTP no Compose, contra o que as fichas diziam. Também aprendemos que o painel precisa se proteger de eventos duplicados ou fora de ordem, porque a entrega entre os backends é "pelo menos uma vez" (ADR 0006).
 
-O que ficou para uma próxima versão: autenticação (login das pessoas e do publicador de eventos do Backend 2), checagem de origem no WebSocket, reenvio automático de eventos pendentes, edição e exclusão de livros e usuários, aviso ao usuário sobre atraso e CI para o frontend. Os defeitos abertos estão no capítulo 7.
+Limites desta versão (1.0): o sistema não tem autenticação (login das pessoas e do publicador de eventos do Backend 2), checagem de origem no WebSocket, reenvio automático de eventos pendentes, edição e exclusão de livros e usuários nem aviso ao usuário sobre atraso, e o frontend não tem CI no GitHub. Os defeitos abertos estão no capítulo 7.
 
 ---
 
