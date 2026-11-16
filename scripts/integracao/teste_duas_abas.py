@@ -8,17 +8,18 @@ aba, sem recarregar, e que a devolução faz o caminho inverso (CT5, CT6, CT12, 
 Uso:
     pip install playwright && playwright install chromium
     python scripts/integracao/teste_duas_abas.py \
-        [--frontend http://localhost:5173] [--api http://localhost:8000] \
+        [--frontend http://localhost:5173] [--api https://localhost:8000] \
         [--prints pasta] [--mostrar]
 
-O certificado do Backend 2 é da CA local do Compose; o navegador do teste ignora
+Os certificados dos dois backends são da CA local do Compose; o navegador do teste ignora
 erros de certificado (equivale a confiar na CA). Cria um livro e um usuário novos
 a cada execução, sem mexer nos dados existentes. Código de saída 0 = passou.
 """
 
 import argparse
 import json
-import random
+import secrets
+import ssl
 import sys
 import time
 import urllib.error
@@ -28,6 +29,9 @@ from pathlib import Path
 from playwright.sync_api import expect, sync_playwright
 
 TEMPO_MS = 10_000
+# O Backend 1 usa o certificado da CA local do Compose; a API é chamada conferindo-o.
+CA_LOCAL = Path(__file__).resolve().parents[2] / "certs" / "ca.pem"
+CONTEXTO_TLS = ssl.create_default_context(cafile=CA_LOCAL) if CA_LOCAL.exists() else None
 
 
 def chamar_api(base, metodo, caminho, corpo=None):
@@ -36,7 +40,7 @@ def chamar_api(base, metodo, caminho, corpo=None):
         base + caminho, data=dados, method=metodo, headers={"Content-Type": "application/json"}
     )
     try:
-        with urllib.request.urlopen(pedido, timeout=10) as resposta:
+        with urllib.request.urlopen(pedido, timeout=10, context=CONTEXTO_TLS) as resposta:
             return json.loads(resposta.read())
     except urllib.error.HTTPError as erro:
         raise SystemExit(f"{metodo} {caminho} falhou: {erro.code} {erro.read().decode()}") from erro
@@ -54,7 +58,7 @@ def quantidade(pagina, titulo):
 def main():
     analisador = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     analisador.add_argument("--frontend", default="http://localhost:5173")
-    analisador.add_argument("--api", default="http://localhost:8000")
+    analisador.add_argument("--api", default="https://localhost:8000")
     analisador.add_argument("--prints", help="pasta para salvar capturas de tela")
     analisador.add_argument("--mostrar", action="store_true", help="abre o navegador visível")
     args = analisador.parse_args()
@@ -63,7 +67,7 @@ def main():
     titulo = f"Livro de integração {sufixo}"
     nome = f"Leitor de integração {sufixo}"
     isbn = "978" + sufixo.rjust(10, "0")[-10:]
-    cpf = "".join(str(random.randint(0, 9)) for _ in range(11))
+    cpf = "".join(secrets.choice("0123456789") for _ in range(11))
     pasta = Path(args.prints) if args.prints else None
     if pasta:
         pasta.mkdir(parents=True, exist_ok=True)

@@ -195,7 +195,7 @@ def test_compose_frontend(compose):
     frontend = compose["services"]["frontend"]
     args = frontend["build"]["args"]
 
-    assert args["VITE_API_URL"] == "http://localhost:8000"
+    assert args["VITE_API_URL"] == "https://localhost:8000"
     assert args["VITE_WS_URL"] == "wss://localhost:8443/ws/biblioteca"
     assert str(frontend["ports"][0]["published"]) == "5173"
 
@@ -248,10 +248,20 @@ def test_compose_backend1_ambiente(compose):
     assert url.path.lstrip("/")
 
 
-# §10 / D22 · SSL_* do backend1 vazios por padrão (HTTP, sem TLS)
-@pytest.mark.parametrize("variavel", ["SSL_CERTFILE", "SSL_KEYFILE"])
-def test_compose_padroes_vazios(compose, variavel):
-    assert compose["services"]["backend1"]["environment"][variavel] in ("", None)
+# D24 · Backend 1 sobe em HTTPS no Compose, com o certificado gerado em ./certs
+@pytest.mark.parametrize(
+    ("variavel", "valor"),
+    [("SSL_CERTFILE", "/certs/backend1.pem"), ("SSL_KEYFILE", "/certs/backend1-key.pem")],
+)
+def test_compose_backend1_https_por_padrao(compose, variavel, valor):
+    assert compose["services"]["backend1"]["environment"][variavel] == valor
+
+
+# D24 · backend1 espera o serviço certificados terminar (os arquivos precisam existir)
+def test_compose_backend1_espera_certificados(compose):
+    depends = compose["services"]["backend1"]["depends_on"]
+
+    assert depends["certificados"]["condition"] == "service_completed_successfully"
 
 
 # D23 · Backend 1 chama o Backend 2 por HTTPS, verificando a CA local do Compose
