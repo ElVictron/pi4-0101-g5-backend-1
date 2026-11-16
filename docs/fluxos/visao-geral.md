@@ -7,11 +7,11 @@ Este projeto é um sistema simples para ajudar uma biblioteca a controlar livros
 | Módulo | O que faz | Tecnologia | Repositório | Responsável |
 |---|---|---|---|---|
 | Frontend | Telas para cadastrar e consultar livros e usuários, registrar empréstimos/devoluções e acompanhar disponibilidade | React | [pi4-0101-g5-frontend](https://github.com/ElVictron/pi4-0101-g5-frontend) | Gabriel Gregorio Ribeiro Leite |
-| Backend 1 | API, regras de negócio e coordenação das operações do sistema | Python | [pi4-0101-g5-backend-1](https://github.com/ElVictron/pi4-0101-g5-backend-1) | Lucas Joaquim de Souza |
-| Banco | Guarda livros, usuários e empréstimos | PostgreSQL | junto do Backend 1 | Lucas Joaquim de Souza |
-| Backend 2 | Recebe eventos do Backend 1 e distribui atualizações em tempo real às telas abertas | Python / WebSocket | [pi4-0101-g5-backend-2](https://github.com/ElVictron/pi4-0101-g5-backend-2) | Victor Hugo Gulino dos Santos |
+| Backend 1 | API, regras de negócio e coordenação das operações do sistema | Python | [pi4-0101-g5-backend-1](https://github.com/ElVictron/pi4-0101-g5-backend-1) | Victor Hugo Gulino dos Santos |
+| Banco | Guarda livros, usuários e empréstimos | PostgreSQL | junto do Backend 1 | Victor Hugo Gulino dos Santos |
+| Backend 2 | Recebe eventos do Backend 1 e distribui atualizações em tempo real às telas abertas | Python / WebSocket | [pi4-0101-g5-backend-2](https://github.com/ElVictron/pi4-0101-g5-backend-2) | Lucas Joaquim de Souza |
 
-> **Decisão do grupo:** Gabriel fica responsável pelo Frontend. Lucas cuida do backend principal em Python e do banco. Victor cuida do segundo backend em Python, responsável por enviar as atualizações em tempo real. A comunicação entre os serviços será protegida por HTTPS; para atualizações em tempo real, será usado WSS.
+> **Decisão do grupo:** Gabriel fica responsável pelo Frontend. Victor cuida do backend principal em Python e do banco. Lucas cuida do segundo backend em Python, responsável por enviar as atualizações em tempo real. A comunicação entre os serviços será protegida por HTTPS; para atualizações em tempo real, será usado WSS.
 
 ## Diagrama de contêineres
 
