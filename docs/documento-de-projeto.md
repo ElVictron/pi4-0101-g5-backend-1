@@ -340,3 +340,140 @@ As convenções comuns (formato de erro, códigos HTTP, datas, normalização de
 | 0004 | Implementar o componente WebSocket em Python | aceito | [Backend 1](adr/0004-websocket-em-python.md) |
 | 0005 | Compose único com TLS e CA local | aceito | [Backend 1](adr/0005-compose-unico-com-tls-e-ca-local.md) |
 | 0006 | Entrega de eventos "pelo menos uma vez", com reenvio | aceito | [Backend 1](adr/0006-entrega-de-eventos-pelo-menos-uma-vez.md) |
+
+---
+
+## Capítulo 7. Testes
+
+**Responsável:** Victor Hugo Gulino dos Santos
+
+### 7.1 Estratégia
+
+Os testes automatizados rodam a cada push no GitHub Actions (backends) e verificam cada módulo isolado: contratos CT1 a CT13, regras de negócio, banco e o Backend 2. Os testes de ponta a ponta são executados à mão, com o sistema inteiro de pé (Docker Compose): sobem os quatro serviços, abrem duas abas de um navegador Chromium real (Playwright) e conferem que um empréstimo ou uma devolução feita numa aba muda o painel da outra sem recarregar. Foram executados em 11/11/2026 (Victor Hugo, numa máquina Linux com Docker Engine 29) e em 16/11/2026 (processos nativos, com o Backend 1 em HTTPS). O frontend ainda não tem CI no GitHub: seus testes rodam à mão com `npm test`.
+
+### 7.2 Testes automatizados
+
+| Módulo | Ferramenta | Testes | Cobertura | CI | Sonar |
+|---|---|---|---|---|---|
+| Backend 1 | pytest, Ruff | 1528 (contrato e unitários, contra um PostgreSQL real) | 100% das linhas e ramos | [última execução na `main`](https://github.com/ElVictron/pi4-0101-g5-backend-1/actions/runs/43864321977) (Python 3.12 e 3.13) | [painel](https://sonarcloud.io/dashboard?id=ElVictron_pi4-0101-g5-backend-1) |
+| Backend 2 | pytest, Ruff | 35 | 96% (linhas e ramos) | [última execução na `main`](https://github.com/ElVictron/pi4-0101-g5-backend-2/actions/runs/43861387679) | [painel](https://sonarcloud.io/dashboard?id=ElVictron_pi4-0101-g5-backend-2) |
+| Frontend | Vitest, Testing Library | 433 em 32 arquivos | 100% das linhas, 98,7% dos ramos | sem CI no GitHub (roda com `npm test`) | não configurado |
+
+O SonarQube Cloud analisa cada PR dos dois backends. Os PRs nº 6, 7 e 8 do Backend 1 e o nº 3 do Backend 2 terminaram com o **Quality Gate aprovado** e 0 problemas novos. O Sonar apontou, e nós corrigimos antes do merge: uma regra de segurança sobre `uv run` sem `--no-build` no CI do Backend 2 e o uso de `random` em um script de teste do Backend 1. Os painéis dos dois projetos, com cobertura e quality gate da `main`, são os links da tabela.
+
+### 7.3 Casos de teste
+
+Os casos TE são a ponte entre o requisito e o teste que o confere. A coluna "Onde" aponta o teste automatizado (arquivo e função) ou o roteiro manual. Todo E de prioridade Alta (E1, E3, E5, E6) tem caso de sucesso e de erro, e todo RNF tem um caso.
+
+| ID | Verifica | Passos | Esperado | Obtido | Situação | Onde |
+|---|---|---|---|---|---|---|
+| TE-01 | RNF-01: sobe com um comando | `docker compose up --build`, depois `python3 scripts/integracao/verificar_docker.py` | Quatro serviços de pé, Backend 2 saudável, teste das duas abas passa | Passou em 11/11/2026 em máquina Linux limpa. Reexecução com o Backend 1 em HTTPS: pendente | Passou (reexecução pendente) | `scripts/integracao/verificar_docker.py` |
+| TE-02 | RNF-02: banco nasce do schema | Aplicar `db/schema.sql` num banco vazio; conferir tabelas, colunas e restrições | Sem erro; tabelas, tipos e chaves como em CT9 a CT11 | As tabelas e restrições conferem | Passou | `tests/contrato/test_e2_banco.py` |
+| TE-03 | RNF-03: Backend 2 fora do ar | Parar o Backend 2, registrar um empréstimo, subir o Backend 2, rodar `python -m app.reenviar_eventos` | Empréstimo responde 201; 1 evento em `eventos_pendentes`; após o reenvio, 0 | 201; 1 pendente; reenvio enviou 1 e a tabela ficou com 0 (execução manual de 16/11/2026) | Passou | `test_e9_registrar_emprestimo.py::test_falha_do_backend2_guarda_evento_pendente`, `test_e9_reenviar_eventos.py::test_reenvia_todos_com_sucesso` |
+| TE-04 | RNF-04: painel em até 2 s | Duas abas; empréstimo e devolução numa, medir até a outra mostrar o valor | Até 2000 ms, sem recarregar | Três execuções: empréstimo 169, 115 e 117 ms; devolução 167, 85 e 106 ms; aba sem recarregar | Passou | `scripts/integracao/teste_duas_abas.py` |
+| TE-05 | RNF-05: sem segredos no repositório | `git ls-files` por `.pem`, `.key`, `.env`; conferir `.gitignore`; Sonar | Nenhum segredo versionado; `certs/` e `.env` ignorados | Nenhum arquivo versionado; Sonar sem Security Hotspots | Passou | Revisão do repositório e do Sonar |
+| TE-06 | RNF-06: evento sem dados do usuário | Publicar evento com `usuarioId` e ler a mensagem enviada aos painéis | A mensagem WSS não leva `usuarioId` | A mensagem não leva `usuarioId` | Passou | `pi4-0101-g5-backend-2`, `tests/test_contratos.py::test_publica_em_todos_os_paineis` |
+| TE-07 | RNF-07: HTTPS e WSS com verificação | Cliente HTTPS publica evento e cliente WSS o recebe, verificando a CA | Conexão aceita com a CA; Backend 2 não sobe sem TLS | Conexão aceita; sem certificado e chave o serviço recusa subir | Passou | Backend 2: `tests/test_tls.py`, `tests/test_inicializacao.py` |
+| TE-08 | RNF-08: duplicados e fora de ordem | Enviar ao painel um evento mais antigo que o já mostrado | O painel ignora o evento antigo | Ignorado, painel mantém o valor mais novo | Passou | Frontend: `src/test/contrato/e7-painel-fora-de-ordem.test.jsx` (8 testes) |
+| TE-11 | E1: cadastro de livro | `POST /livros` com título, autor, ISBN e exemplares | 201 com o livro e `quantidadeDisponivel` igual ao total | Conforme | Passou | `test_e4_cadastrar_livro.py::test_cadastra_livro_com_sucesso` |
+| TE-12 | E1: ISBN duplicado (erro) | Cadastrar o mesmo ISBN duas vezes, inclusive com hífens | 409 `ISBN_DUPLICADO` | Conforme | Passou | `test_e4_cadastrar_livro.py::test_isbn_duplicado` |
+| TE-21 | E2: busca de livros | `GET /livros?busca=...` sem caixa nem acento | Lista os livros que casam, com a quantidade disponível | Conforme | Passou | `test_e6_consultar_livros.py::test_busca` |
+| TE-22 | E2: acervo vazio | `GET /livros` com o banco vazio | 200 com lista vazia e `total` 0 | Conforme | Passou | `test_e6_consultar_livros.py::test_banco_vazio` |
+| TE-31 | E3: CPF normalizado | `POST /usuarios` com CPF `123.456.789-00` | Guarda só os 11 dígitos | Conforme | Passou | `test_e5_cadastrar_usuario.py::test_cpf_normalizado` |
+| TE-32 | E3: CPF duplicado (erro) | Cadastrar o mesmo CPF duas vezes | 409 `CPF_DUPLICADO` | Conforme | Passou | `test_e5_cadastrar_usuario.py::test_cpf_duplicado` |
+| TE-41 | E4: busca de usuários | `GET /usuarios?busca=...` por nome ou por trecho do CPF | Lista os usuários que casam, com seus empréstimos | Conforme | Passou | `test_e8_consultar_usuarios.py::test_busca` |
+| TE-42 | E4: usuário sem empréstimos | Consultar um usuário sem empréstimos | `emprestimos` vem como lista vazia | Conforme | Passou | `test_e8_consultar_usuarios.py::test_usuario_sem_emprestimos` |
+| TE-51 | E5: registro de empréstimo | `POST /emprestimos` com usuário e livro disponível | 201, prazo de 15 dias, disponibilidade reduzida em 1, evento publicado | Conforme | Passou | `test_e9_registrar_emprestimo.py::test_registra_emprestimo_com_sucesso`, `tests/unitarios/test_emprestimos.py::test_prazo_de_15_dias_no_mesmo_horario` |
+| TE-52 | E5: livro sem exemplar (erro) | Emprestar um livro com 0 disponíveis | 409 `LIVRO_INDISPONIVEL`; quantidade não fica negativa | Conforme | Passou | `test_e9_registrar_emprestimo.py::test_livro_indisponivel` |
+| TE-61 | E6: devolução | `PATCH /emprestimos/{id}/devolucao` de um empréstimo ativo | 200, status devolvido, disponibilidade aumenta em 1 | Conforme | Passou | `test_e11_registrar_devolucao.py::test_devolve_emprestimo_ativo` |
+| TE-62 | E6: já devolvido (erro) | Devolver duas vezes o mesmo empréstimo | 409 `EMPRESTIMO_JA_DEVOLVIDO` | Conforme | Passou | `test_e11_registrar_devolucao.py::test_emprestimo_ja_devolvido_semeado` |
+| TE-71 | E7: disponibilidade | `GET /livros/disponibilidade` com livros sem exemplar livre | Só aparecem os livros com exemplar livre | Conforme | Passou | `test_e7_listar_disponibilidade.py::test_so_livros_com_exemplar_livre` |
+| TE-81 | E8: filtro por situação | `GET /emprestimos?status=ativo`, `atrasado` e `devolvido` | Cada filtro traz só a sua situação; atrasado é calculado pela data limite | Conforme | Passou | `test_e10_consultar_emprestimos.py::test_filtro_status` |
+| TE-82 | E8: situação inválida (erro) | `GET /emprestimos?status=ATIVO` | 400 `STATUS_INVALIDO` | Conforme | Passou | `test_e10_consultar_emprestimos.py::test_status_invalido` |
+
+### 7.4 Resumo da execução
+
+Última rodada: 16/11/2026. Dos 23 casos, **23 passaram**, 0 falharam e 0 não foram executados. O TE-01 tem uma ressalva: a execução de 11/11/2026 passou, e a reexecução depois da mudança do Backend 1 para HTTPS (PR nº 8) ainda precisa ser feita numa máquina com Docker e acessível ao Docker Hub. Os casos de Backend (TE-02, TE-11 a TE-82) são os testes automatizados listados na coluna "Onde"; a suíte inteira (1528 + 35 + 433 testes) também passou nessa data.
+
+### 7.5 Defeitos conhecidos
+
+Os defeitos abertos na entrega, com a severidade da tabela do enunciado. Cada um tem um card `Bug:` no OpenProject.
+
+| Defeito | Severidade | Módulo | Teste | Card |
+|---|---|---|---|---|
+| `POST /eventos/biblioteca` aceita eventos sem autenticação | Média | Backend 2 | TE-07 | a registrar no OpenProject |
+| O WebSocket não confere a origem (`Origin`) da conexão | Baixa | Backend 2 | TE-07 | a registrar no OpenProject |
+| Com o Backend 2 fora do ar ao abrir a tela, as listas só atualizam depois de uma reconexão | Baixa | Frontend | TE-08 | a registrar no OpenProject |
+| O reenvio de eventos pendentes é manual (`python -m app.reenviar_eventos`) | Baixa | Backend 1 | TE-03 | a registrar no OpenProject |
+
+As duas primeiras ficaram de fora por decisão do grupo (11/11/2026): o sistema é para uma rede local e o evento não leva dados do usuário. A entrega "pelo menos uma vez" e fora de ordem não é defeito: é a decisão do ADR 0006, coberta no TE-08.
+
+Defeitos corrigidos durante o desenvolvimento, e já fechados: a CA local sem `keyUsage` era recusada pelo Python 3.13 (achado na integração, corrigido no script de certificados); um evento antigo podia fazer o painel voltar a um valor mais velho (corrigido no frontend, TE-08); o Backend 1 usava HTTP no Compose, em desacordo com as fichas CT1 a CT8 (corrigido no PR nº 8, D24).
+
+---
+
+## Capítulo 8. Principais telas
+
+**Responsável:** Gabriel Gregorio Ribeiro Leite
+
+Prints da versão entregue, com os dados de exemplo carregados (`db/dados-demo.sql`). O indicador "Tempo real: conectado" no canto superior mostra que a tela está ligada ao WSS do Backend 2.
+
+**Painel de disponibilidade (E7).** Tela do responsável da biblioteca. Mostra cada livro com os exemplares disponíveis e o total, e se atualiza sozinha quando outra tela registra um empréstimo ou uma devolução.
+
+![Painel de disponibilidade](img/tela-painel.png)
+
+**Acervo (E1, E2).** Cadastro de livros (título, autor, ISBN e quantidade de exemplares) e pesquisa com paginação, mostrando a quantidade disponível de cada um.
+
+![Acervo](img/tela-acervo.png)
+
+**Usuários (E3, E4).** Cadastro de usuários (nome, CPF e contato) e pesquisa por nome ou CPF. Cada cartão mostra os empréstimos do usuário, com a situação (ativo, atrasado ou devolvido).
+
+![Usuários](img/tela-usuarios.png)
+
+**Empréstimos (E5, E6, E8).** Registro de empréstimo (busca o usuário e escolhe o livro) e lista dos empréstimos com filtro por situação (Todos, Ativos, Atrasados, Devolvidos), busca e o botão Devolver. O empréstimo atrasado aparece em vermelho.
+
+![Empréstimos](img/tela-emprestimos.png)
+
+---
+
+## Capítulo 9. Como rodar
+
+**Responsável:** Victor Hugo Gulino dos Santos
+
+Este capítulo é o [`README.md`](../README.md) da raiz do repositório principal, incluído no PDF. Ele explica como subir o sistema do zero numa máquina com Docker.
+
+---
+
+## Capítulo 10. Conclusão
+
+**Responsável:** todos os integrantes (Gabriel, Lucas e Victor)
+
+O sistema entrega os oito entregáveis da Entrega 1 (E1 a E8) funcionando, de ponta a ponta, em quatro contêineres que sobem com um comando. O responsável cadastra livros e usuários, registra empréstimos e devoluções e vê a disponibilidade e os atrasos. Um empréstimo numa tela aparece no painel de outra tela aberta em cerca de 100 a 170 ms, sem recarregar (TE-04). O Backend 1 tem 1528 testes e 100% de cobertura, o Backend 2 tem 35 testes e 96%, e o frontend tem 433 testes e 100% das linhas.
+
+O que deu certo: escrever o contrato antes do código. Quando o frontend e os dois backends seguiram a mesma ficha CT, as partes encaixaram. O que deu mais trabalho foi a segurança do transporte: o Backend 2 só sobe com TLS, e isso exigiu gerar uma CA local, ensinar o Backend 1 a verificá-la e pedir ao navegador que confie nela. Descobrimos na integração que uma CA sem `keyUsage` é recusada pelo Python 3.13, e que o Backend 1 ainda estava em HTTP no Compose, contra o que as fichas diziam. Também aprendemos que o painel precisa se proteger de eventos duplicados ou fora de ordem, porque a entrega entre os backends é "pelo menos uma vez" (ADR 0006).
+
+O que ficou para uma próxima versão: autenticação (login das pessoas e do publicador de eventos do Backend 2), checagem de origem no WebSocket, reenvio automático de eventos pendentes, edição e exclusão de livros e usuários, aviso ao usuário sobre atraso e CI para o frontend. Os defeitos abertos estão no capítulo 7.
+
+---
+
+## Capítulo 11. Anexos
+
+**Responsável:** Lucas Joaquim de Souza
+
+**Repositórios no GitHub**
+
+- Principal (Backend 1, `docker-compose.yml`, este documento): <https://github.com/ElVictron/pi4-0101-g5-backend-1>
+- Backend 2: <https://github.com/ElVictron/pi4-0101-g5-backend-2>
+- Frontend: <https://github.com/ElVictron/pi4-0101-g5-frontend>
+- Entrega 1 (escopo): <https://github.com/ElVictron/pi4-2026-2-0102-grupo05>
+
+**Quadro do OpenProject:** <https://srv1889234.hstgr.cloud/projects/pi-iv-0101-g5>
+
+**Release v1.0:** <https://github.com/ElVictron/pi4-0101-g5-backend-1/releases/tag/v1.0> (repositório principal)
+
+**CI e Sonar**
+
+- Backend 1: [última execução do CI na `main`](https://github.com/ElVictron/pi4-0101-g5-backend-1/actions/runs/43864321977) · [painel do SonarQube](https://sonarcloud.io/dashboard?id=ElVictron_pi4-0101-g5-backend-1)
+- Backend 2: [última execução do CI na `main`](https://github.com/ElVictron/pi4-0101-g5-backend-2/actions/runs/43861387679) · [painel do SonarQube](https://sonarcloud.io/dashboard?id=ElVictron_pi4-0101-g5-backend-2)
+
+**Outros anexos:** roteiro de demonstração em [`roteiro-demonstracao.md`](roteiro-demonstracao.md); histórico do desenvolvimento e das decisões em [`agentes.md`](../agentes.md).
