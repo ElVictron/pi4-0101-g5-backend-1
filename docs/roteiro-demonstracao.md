@@ -21,7 +21,7 @@ Espere os quatro serviços ficarem de pé (o Backend 1 só sobe depois que o Bac
 docker compose exec -T postgres psql -U biblioteca -d biblioteca < db/dados-demo.sql
 ```
 
-**Certificado.** O Backend 2 usa uma CA local gerada em `certs/ca.pem`. Importe esse arquivo como autoridade confiável no navegador (veja o README) e reinicie o navegador. Sem isso, o indicador do canto superior direito fica "Tempo real: desconectado".
+**Certificado.** Os dois backends usam uma CA local gerada em `certs/ca.pem`. Importe esse arquivo como autoridade confiável no navegador (veja o README) e reinicie o navegador. Sem isso, o indicador do canto superior direito fica "Tempo real: desconectado".
 
 Confira: `http://localhost:5173` abre o painel e o indicador mostra **Tempo real: conectado**.
 
@@ -91,5 +91,5 @@ Cria um livro e um usuário novos, faz o empréstimo e a devolução numa aba e 
 | Sintoma | Causa provável |
 |---|---|
 | "Tempo real: desconectado" | O navegador não confia em `certs/ca.pem`, ou o Backend 2 não subiu (`docker compose ps`) |
-| Telas com mensagem de erro de conexão | Backend 1 fora do ar ou `VITE_API_URL` diferente de `http://localhost:8000` |
+| Telas com mensagem de erro de conexão | o navegador não confia em `certs/ca.pem` (o Backend 1 também é HTTPS), Backend 1 fora do ar ou `VITE_API_URL` diferente de `https://localhost:8000` |
 | Dados de exemplo "não inseridos" | O banco já tinha dados; recrie com `docker compose down -v && docker compose up --build` |

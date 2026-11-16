@@ -14,6 +14,7 @@ Por padrão deixa o sistema rodando (http://localhost:5173); --derrubar faz
 """
 
 import argparse
+import ssl
 import subprocess
 import sys
 import time
@@ -22,6 +23,7 @@ import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parents[2]
+CA_LOCAL = RAIZ / "certs" / "ca.pem"  # gerada pelo serviço `certificados` do Compose
 RESULTADOS: list[tuple[str, bool, str]] = []
 
 
@@ -40,8 +42,10 @@ def compose(*args, **kwargs):
 
 
 def http_ok(url):
+    # Confere o certificado do Backend 1 com a CA local do Compose (certs/ca.pem).
+    contexto = ssl.create_default_context(cafile=CA_LOCAL) if CA_LOCAL.exists() else None
     try:
-        with urllib.request.urlopen(url, timeout=3) as resposta:
+        with urllib.request.urlopen(url, timeout=3, context=contexto) as resposta:
             return resposta.status == 200
     except (urllib.error.URLError, OSError):
         return False
@@ -97,7 +101,7 @@ def main():
         compose("logs", "--tail", "40")
         return resumo()
 
-    if esperar("http://localhost:8000/saude", "Backend 1") and esperar(
+    if esperar("https://localhost:8000/saude", "Backend 1") and esperar(
         "http://localhost:5173", "Frontend"
     ):
         estado = compose(

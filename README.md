@@ -39,13 +39,13 @@ docker compose up --build
 | Serviço | Endereço | Observação |
 |---|---|---|
 | Frontend | `http://localhost:5173` | imagem Nginx; o navegador chama os dois backends pelo host |
-| Backend 1 | `http://localhost:8000` | `curl http://localhost:8000/saude` |
+| Backend 1 | `https://localhost:8000` | HTTPS; `curl --cacert certs/ca.pem https://localhost:8000/saude` |
 | Backend 2 | `https://localhost:8443` | HTTPS e WSS (`/ws/biblioteca`); só aceita TLS |
 | PostgreSQL 16 | rede interna | dados no volume `dados-postgres` |
 
-- **Certificados.** Na primeira subida, o serviço `certificados` gera em `./certs` uma CA local (`ca.pem`) e o certificado do Backend 2 (nomes `localhost`, `backend2`, `127.0.0.1`). Para gerar fora do Docker: `sh scripts/gerar-certificados.sh` (`FORCE=1` regera). A pasta `certs/` não é versionada.
+- **Certificados.** Na primeira subida, o serviço `certificados` gera em `./certs` uma CA local (`ca.pem`) e os certificados do Backend 1 e do Backend 2 (nomes `localhost`, o nome do serviço e `127.0.0.1`). Para gerar fora do Docker: `sh scripts/gerar-certificados.sh` (`FORCE=1` regera). A pasta `certs/` não é versionada.
 - **Backend 1 → Backend 2.** Por HTTPS em `https://backend2:8443`, verificando a CA local (`BACKEND2_CA_BUNDLE=/certs/ca.pem`).
-- **Navegador → Backend 2.** O frontend abre `wss://localhost:8443/ws/biblioteca`. Sem confiar na CA, o navegador recusa o WSS e a tela mostra "desconectado". Importe `certs/ca.pem` como autoridade confiável (Windows: duplo clique, "Instalar certificado", "Autoridades de certificação raiz confiáveis"; Firefox: Configurações → Certificados → Importar). Reinicie o navegador depois.
+- **Navegador → Backends.** O frontend chama `https://localhost:8000` (Backend 1) e abre `wss://localhost:8443/ws/biblioteca` (Backend 2). Sem confiar na CA, o navegador recusa os dois: as telas mostram erro de conexão e o painel fica "desconectado". Importe `certs/ca.pem` como autoridade confiável (Windows: duplo clique, "Instalar certificado", "Autoridades de certificação raiz confiáveis"; Firefox: Configurações → Certificados → Importar). Reinicie o navegador depois.
 - **Só o Backend 1.** `docker compose up --build postgres backend1` (sem Backend 2, os eventos ficam em `eventos_pendentes`).
 - O schema é aplicado **só na primeira vez**, com o volume novo. Mudou o `db/schema.sql`? Recrie o banco (apaga os dados): `docker compose down -v && docker compose up --build`.
 - Configuração por variáveis de ambiente (arquivo `.env` ao lado do `docker-compose.yml` ou exportadas no terminal); veja a tabela abaixo.
@@ -64,9 +64,9 @@ docker compose exec -T postgres psql -U biblioteca -d biblioteca < db/dados-demo
 
 Insere 4 livros, 3 usuários e 3 empréstimos, **um deles atrasado** (prazo vencido há 5 dias). Só insere se o banco estiver vazio.
 
-### HTTPS no Backend 1 (opcional)
+### HTTPS no Backend 1
 
-O Backend 1 sobe em HTTP por padrão. Para HTTPS, defina `SSL_CERTFILE` e `SSL_KEYFILE` apontando para arquivos montados em `/certs`. Com as duas variáveis, o `scripts/iniciar.sh` sobe o Uvicorn com TLS; com só uma delas, o contêiner não sobe. A chave precisa ser legível pelo usuário do contêiner (uid 10001), por exemplo `chmod 644` ou `chown 10001` no arquivo. Se mudar o Backend 1 para HTTPS, ajuste `VITE_API_URL` do frontend para `https://...`.
+No Compose o Backend 1 já sobe em HTTPS (D24), com `certs/backend1.pem`. Com `SSL_CERTFILE` e `SSL_KEYFILE`, o `scripts/iniciar.sh` sobe o Uvicorn com TLS; com só uma delas, o contêiner não sobe. Para voltar ao HTTP no Compose (por exemplo, sem importar a CA), defina `SSL_CERTFILE=` e `SSL_KEYFILE=` vazios e `VITE_API_URL=http://localhost:8000` no `.env`, e use `docker compose up --build`. Rodando sem Docker, o padrão continua HTTP.
 
 ## Rodar sem Docker
 
